@@ -1,5 +1,6 @@
 add_executable(isoforge_editor
     src/main.cpp
+    src/EditorApp.cpp
 )
 
 target_include_directories(isoforge_editor

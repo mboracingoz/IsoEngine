@@ -2,6 +2,12 @@ add_executable(isoforge_editor
     src/main.cpp
     src/EditorApp.cpp
     src/ImGuiLayer.cpp
+    src/panels/SceneViewportPanel.cpp
+    src/panels/HierarchyPanel.cpp
+    src/panels/InspectorPanel.cpp
+    src/panels/AssetBrowserPanel.cpp
+    src/panels/TilePalettePanel.cpp
+    src/panels/ConsolePanel.cpp
 )
 
 target_include_directories(isoforge_editor

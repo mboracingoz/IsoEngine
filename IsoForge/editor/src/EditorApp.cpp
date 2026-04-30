@@ -10,6 +10,12 @@ namespace IsoForge
 EditorApp::EditorApp()
     : Application("IsoForge Editor", 1280, 720)
     , m_ImGuiLayer()
+    , m_SceneViewportPanel()
+    , m_HierarchyPanel()
+    , m_InspectorPanel()
+    , m_AssetBrowserPanel()
+    , m_TilePalettePanel()
+    , m_ConsolePanel()
     , m_ShowAboutWindow(false)
     , m_ShowDemoWindow(false)
 {
@@ -31,6 +37,13 @@ void EditorApp::OnRender()
     m_ImGuiLayer.BeginFrame();
 
     RenderDockspace();
+
+    m_SceneViewportPanel.OnImGuiRender();
+    m_HierarchyPanel.OnImGuiRender();
+    m_InspectorPanel.OnImGuiRender();
+    m_AssetBrowserPanel.OnImGuiRender();
+    m_TilePalettePanel.OnImGuiRender();
+    m_ConsolePanel.OnImGuiRender();
 
     if (m_ShowAboutWindow)
     {
@@ -92,6 +105,33 @@ void EditorApp::RenderDockspace()
 
         if (ImGui::BeginMenu("View"))
         {
+            ImGui::MenuItem(
+                m_SceneViewportPanel.GetTitle(),
+                nullptr,
+                &m_SceneViewportPanel.GetOpenRef()
+            );
+            ImGui::MenuItem(
+                m_HierarchyPanel.GetTitle(),
+                nullptr,
+                &m_HierarchyPanel.GetOpenRef()
+            );
+            ImGui::MenuItem(
+                m_InspectorPanel.GetTitle(),
+                nullptr,
+                &m_InspectorPanel.GetOpenRef()
+            );
+            ImGui::MenuItem(
+                m_AssetBrowserPanel.GetTitle(),
+                nullptr,
+                &m_AssetBrowserPanel.GetOpenRef()
+            );
+            ImGui::MenuItem(
+                m_TilePalettePanel.GetTitle(),
+                nullptr,
+                &m_TilePalettePanel.GetOpenRef()
+            );
+            ImGui::MenuItem(m_ConsolePanel.GetTitle(), nullptr, &m_ConsolePanel.GetOpenRef());
+            ImGui::Separator();
             ImGui::MenuItem("ImGui Demo", nullptr, &m_ShowDemoWindow);
             ImGui::EndMenu();
         }
@@ -117,7 +157,7 @@ void EditorApp::RenderAboutWindow()
     if (ImGui::Begin("About IsoForge", &m_ShowAboutWindow, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::TextUnformatted("IsoForge Editor");
-        ImGui::TextUnformatted("Phase 1B -- Dear ImGui Docking Shell");
+        ImGui::TextUnformatted("Phase 1C -- Empty Editor Panels");
         ImGui::TextUnformatted("C++20 / SDL3 / OpenGL 3.3 / Dear ImGui");
         ImGui::Separator();
 

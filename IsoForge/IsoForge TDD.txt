@@ -1,0 +1,1973 @@
+# IsoForge Editor — Technical Architecture Document
+
+**Version:** 0.1.0-draft
+**Author:** Architecture Specification
+**Target Platform:** Linux Desktop (CachyOS / Arch-based)
+**Language:** C++20
+**Date:** 2025
+
+---
+
+## Table of Contents
+
+1. [High-Level Architecture Overview](#1-high-level-architecture-overview)
+2. [Recommended Folder Structure](#2-recommended-folder-structure)
+3. [Module Responsibilities](#3-module-responsibilities)
+4. [Dependency Graph](#4-dependency-graph)
+5. [Editor Data Flow Diagram](#5-editor-data-flow-diagram)
+6. [Runtime / Editor Separation Diagram](#6-runtime--editor-separation-diagram)
+7. [Main Engine Loop Pseudocode](#7-main-engine-loop-pseudocode)
+8. [Editor Loop Pseudocode](#8-editor-loop-pseudocode)
+9. [OpenGL Framebuffer Inside ImGui](#9-opengl-framebuffer-inside-imgui)
+10. [Isometric Rendering Module Design](#10-isometric-rendering-module-design)
+11. [Isometric Math Functions](#11-isometric-math-functions)
+12. [ECS Design Using EnTT](#12-ecs-design-using-entt)
+13. [Serialization Design](#13-serialization-design)
+14. [Logging Design](#14-logging-design)
+15. [Asset System MVP](#15-asset-system-mvp)
+16. [Editor Panels](#16-editor-panels)
+17. [CMake Project Structure](#17-cmake-project-structure)
+18. [Third-Party Dependency Management](#18-third-party-dependency-management)
+19. [Performance Constraints](#19-performance-constraints)
+20. [Coding Standards](#20-coding-standards)
+21. [Development Phases](#21-development-phases)
+22. [Codex Task Generation Rules](#22-codex-task-generation-rules)
+23. [First Implementation Task](#23-first-implementation-task)
+
+---
+
+## 1. High-Level Architecture Overview
+
+IsoForge Editor is structured as three distinct layers that never mix:
+
+```
+┌─────────────────────────────────────────────────┐
+│                  EDITOR LAYER                   │
+│   ImGui UI · Panels · Editor Camera · Gizmos    │
+│   Project System · Undo/Redo · Play/Stop        │
+├─────────────────────────────────────────────────┤
+│                  ENGINE LAYER                   │
+│   ECS (EnTT) · Renderer · Asset System          │
+│   Isometric Math · Scene · Serialization        │
+├─────────────────────────────────────────────────┤
+│                 PLATFORM LAYER                  │
+│   SDL3 · OpenGL 3.3 · spdlog · glm · stb_image  │
+└─────────────────────────────────────────────────┘
+```
+
+**Core Design Principle:** The engine layer compiles and runs without a single `#include` from the editor layer. The editor layer owns the main loop during edit mode and hands off control to the engine's update tick for scene simulation.
+
+**Framebuffer Strategy:** The scene is never rendered directly to the window. Instead it is rendered into an OpenGL Framebuffer Object (FBO), and that FBO's color texture is displayed inside a Dear ImGui `Image()` call inside the `SceneViewportPanel`. This is identical to how Godot's editor viewport works.
+
+---
+
+## 2. Recommended Folder Structure
+
+```
+IsoForge/
+├── CMakeLists.txt                    ← Root CMake
+├── CMakePresets.json                 ← Debug/Release presets
+├── .clang-format                     ← Formatting rules
+├── .gitignore
+├── README.md
+│
+├── engine/                           ← ENGINE LIBRARY (no editor code)
+│   ├── CMakeLists.txt
+│   ├── include/
+│   │   └── engine/
+│   │       ├── core/
+│   │       │   ├── Application.h     ← Window + context owner
+│   │       │   ├── Window.h          ← SDL3 wrapper
+│   │       │   └── Layer.h           ← Layer stack base
+│   │       ├── renderer/
+│   │       │   ├── Renderer.h        ← OpenGL draw calls
+│   │       │   ├── Framebuffer.h     ← FBO wrapper
+│   │       │   ├── Shader.h
+│   │       │   ├── Texture.h
+│   │       │   ├── VertexArray.h
+│   │       │   ├── VertexBuffer.h
+│   │       │   └── IndexBuffer.h
+│   │       ├── iso/
+│   │       │   ├── IsoMath.h         ← Grid↔World↔Screen conversions
+│   │       │   ├── IsoCamera.h
+│   │       │   └── IsoRenderer.h     ← Draws iso tiles into FBO
+│   │       ├── scene/
+│   │       │   ├── Scene.h           ← EnTT registry wrapper
+│   │       │   ├── Entity.h          ← Entity handle
+│   │       │   └── Components.h      ← All component structs
+│   │       ├── assets/
+│   │       │   ├── AssetManager.h    ← Texture cache + path resolution
+│   │       │   └── TextureAsset.h
+│   │       └── serialization/
+│   │           ├── SceneSerializer.h
+│   │           └── TilemapSerializer.h
+│   └── src/
+│       ├── core/
+│       ├── renderer/
+│       ├── iso/
+│       ├── scene/
+│       ├── assets/
+│       └── serialization/
+│
+├── editor/                           ← EDITOR EXECUTABLE (uses engine)
+│   ├── CMakeLists.txt
+│   ├── include/
+│   │   └── editor/
+│   │       ├── EditorApp.h           ← Main editor application
+│   │       ├── EditorContext.h       ← Shared editor state
+│   │       ├── EditorCamera.h        ← Pan/zoom camera for viewport
+│   │       ├── panels/
+│   │       │   ├── Panel.h           ← Base panel interface
+│   │       │   ├── SceneViewportPanel.h
+│   │       │   ├── HierarchyPanel.h
+│   │       │   ├── InspectorPanel.h
+│   │       │   ├── AssetBrowserPanel.h
+│   │       │   ├── TilePalettePanel.h
+│   │       │   └── ConsolePanel.h
+│   │       └── project/
+│   │           ├── Project.h
+│   │           └── ProjectSerializer.h
+│   └── src/
+│       ├── main.cpp                  ← Entry point
+│       ├── EditorApp.cpp
+│       ├── EditorContext.cpp
+│       ├── EditorCamera.cpp
+│       ├── panels/
+│       └── project/
+│
+├── third_party/                      ← Vendored or FetchContent managed
+│   ├── CMakeLists.txt
+│   ├── imgui/                        ← Dear ImGui docking branch
+│   ├── ImGuizmo/
+│   ├── entt/                         ← Header-only
+│   ├── nlohmann_json/                ← Header-only
+│   ├── spdlog/                       ← Header-only or compiled
+│   ├── glm/                          ← Header-only
+│   └── stb/                          ← stb_image.h
+│
+├── assets/                           ← Editor's own assets (icons, fonts)
+│   ├── fonts/
+│   └── icons/
+│
+└── projects/                         ← User game projects live here (gitignored)
+    └── MyIsometricGame/
+        ├── project.json
+        ├── scenes/
+        │   └── main.scene.json
+        └── assets/
+            └── tilesets/
+```
+
+---
+
+## 3. Module Responsibilities
+
+### 3.1 `engine/core` — Platform Abstraction
+
+| Class | Responsibility |
+|---|---|
+| `Application` | Owns the SDL3 window, OpenGL context, and the main loop. Abstract base class. |
+| `Window` | Thin SDL3 wrapper: create, destroy, swap buffers, poll events. |
+| `Layer` | Interface with `OnUpdate(dt)`, `OnEvent(e)`, `OnImGuiRender()`. Used for the editor layer stack. |
+
+**Rule:** `Application` must not know about ImGui. That belongs to the editor layer.
+
+### 3.2 `engine/renderer` — OpenGL Abstraction
+
+| Class | Responsibility |
+|---|---|
+| `Framebuffer` | Creates/destroys FBO + color texture + depth renderbuffer. Provides `Bind()`, `Unbind()`, `Resize(w,h)`, `GetColorTextureID()`. |
+| `Shader` | Loads/compiles GLSL. Uniform setters. |
+| `Texture` | Wraps GL texture ID. Created by AssetManager. |
+| `VertexArray`, `VertexBuffer`, `IndexBuffer` | Standard OpenGL object wrappers. RAII destructors. |
+| `Renderer` | Stateless draw call dispatcher. `DrawQuad(transform, texture, color)`. |
+
+**Rule:** All OpenGL calls live here. Nothing outside this module calls `glXxx` directly.
+
+### 3.3 `engine/iso` — Isometric Logic
+
+| Class | Responsibility |
+|---|---|
+| `IsoMath` | Pure math functions. Grid↔World, World↔Screen, hover detection. No state. |
+| `IsoCamera` | Position, zoom, projection matrix. Pan/zoom logic. |
+| `IsoRenderer` | Uses `Renderer` to draw tiles in depth-sorted order into the bound FBO. |
+
+### 3.4 `engine/scene` — ECS
+
+| Class | Responsibility |
+|---|---|
+| `Scene` | Owns `entt::registry`. Creates/destroys entities. Runs system updates. |
+| `Entity` | Thin handle: `entt::entity` + `Scene*`. Adds `AddComponent<T>()`, `GetComponent<T>()`, etc. |
+| `Components.h` | Plain structs: `NameComponent`, `TransformComponent`, `SpriteRendererComponent`, `TilemapComponent`, `CameraComponent`. No methods. |
+
+### 3.5 `engine/assets` — Asset System
+
+| Class | Responsibility |
+|---|---|
+| `AssetManager` | Loads textures via `stb_image`, caches by path string, resolves paths relative to the active project root. |
+| `TextureAsset` | Holds `std::shared_ptr<Texture>` + metadata (width, height, path). |
+
+### 3.6 `engine/serialization` — JSON I/O
+
+| Class | Responsibility |
+|---|---|
+| `SceneSerializer` | Writes/reads `scene.json` using nlohmann/json. Iterates EnTT registry. |
+| `TilemapSerializer` | Writes/reads tilemap data independently of full scene. |
+
+### 3.7 `editor/EditorApp` — Editor Main Class
+
+Inherits `Application`. Creates ImGui context, sets up docking, creates all panels, owns `EditorContext`.
+
+### 3.8 `editor/EditorContext` — Shared Editor State
+
+A plain struct passed by pointer to all panels. Contains:
+- `Scene* activeScene`
+- `Entity selectedEntity`
+- `Project* project`
+- `Framebuffer* sceneFramebuffer`
+- `IsoCamera* editorCamera`
+- `TilePaletteState tilePalette`
+
+**Rule:** No global singletons. Panels receive `EditorContext*` in their constructor. This is the only form of shared state.
+
+### 3.9 `editor/panels` — UI Panels
+
+Each panel is a class with a single `OnImGuiRender(EditorContext&)` method. No panel owns engine resources — they read/write through `EditorContext`.
+
+### 3.10 `editor/project` — Project System
+
+Manages the active project directory: resolves asset paths, reads/writes `project.json`, bootstraps new projects.
+
+---
+
+## 4. Dependency Graph
+
+```mermaid
+graph TD
+    subgraph third_party
+        SDL3
+        OpenGL
+        ImGui
+        ImGuizmo
+        EnTT
+        nlohmann
+        spdlog
+        glm
+        stb
+    end
+
+    subgraph engine
+        Core --> SDL3
+        Core --> OpenGL
+        Renderer --> OpenGL
+        Renderer --> glm
+        Renderer --> stb
+        IsoModule[iso] --> Renderer
+        IsoModule --> glm
+        SceneModule[scene] --> EnTT
+        SceneModule --> glm
+        Assets --> Renderer
+        Assets --> stb
+        Serialization --> SceneModule
+        Serialization --> nlohmann
+    end
+
+    subgraph editor
+        EditorApp --> Core
+        EditorApp --> ImGui
+        EditorApp --> ImGuizmo
+        EditorContext --> SceneModule
+        EditorContext --> IsoModule
+        EditorContext --> Assets
+        Panels --> EditorContext
+        Panels --> ImGui
+        ProjectSystem --> Serialization
+        ProjectSystem --> nlohmann
+    end
+
+    editor --> engine
+    engine --> third_party
+```
+
+---
+
+## 5. Editor Data Flow Diagram
+
+```mermaid
+sequenceDiagram
+    participant SDL as SDL3 Events
+    participant App as EditorApp
+    participant Ctx as EditorContext
+    participant VP as SceneViewportPanel
+    participant FBO as Framebuffer (OpenGL)
+    participant IR as IsoRenderer
+    participant ImGui as Dear ImGui
+
+    SDL->>App: PollEvents()
+    App->>Ctx: Forward input to EditorCamera if viewport hovered
+    App->>ImGui: ImGui::NewFrame()
+    App->>ImGui: BeginDockSpace()
+
+    App->>VP: OnImGuiRender(ctx)
+    VP->>FBO: Bind()
+    VP->>IR: RenderScene(scene, camera)
+    IR->>FBO: glDraw calls
+    VP->>FBO: Unbind()
+    VP->>ImGui: ImGui::Image(FBO.colorTextureID)
+    VP->>VP: DetectTileHover(mousePos)
+
+    App->>ImGui: RenderAllPanels()
+    App->>ImGui: ImGui::Render()
+    App->>SDL: SDL_GL_SwapWindow()
+```
+
+---
+
+## 6. Runtime / Editor Separation Diagram
+
+```mermaid
+graph LR
+    subgraph "EDITOR BINARY (isoforge_editor)"
+        EditorApp
+        Panels
+        EditorCamera
+        ProjectSystem
+        ImGuiLayer
+    end
+
+    subgraph "ENGINE LIBRARY (libisoforge_engine.a)"
+        Core
+        Renderer
+        IsoMath
+        IsoRenderer
+        Scene["Scene / ECS"]
+        AssetManager
+        Serialization
+    end
+
+    subgraph "THIRD PARTY"
+        SDL3
+        OpenGL["OpenGL 3.3"]
+        EnTT
+        nlohmann
+        spdlog
+        glm
+        ImGui["ImGui (editor only)"]
+    end
+
+    EditorApp --> Core
+    EditorApp --> Scene
+    Panels --> Renderer
+    Panels --> IsoMath
+    Panels --> AssetManager
+    ImGuiLayer -->|"ImGui.h never included\nin engine headers"| EditorApp
+
+    Core --> SDL3
+    Core --> OpenGL
+    Renderer --> OpenGL
+    Scene --> EnTT
+    AssetManager --> glm
+    Serialization --> nlohmann
+
+    style "ENGINE LIBRARY (libisoforge_engine.a)" fill:#1a3a1a,stroke:#4caf50
+    style "EDITOR BINARY (isoforge_editor)" fill:#1a2a3a,stroke:#2196f3
+    style "THIRD PARTY" fill:#2a1a1a,stroke:#f44336
+```
+
+**Hard Rule:** `engine/` headers must never `#include` any ImGui header. A static analysis check in CI should enforce this.
+
+---
+
+## 7. Main Engine Loop Pseudocode
+
+```
+// Application::Run() — owns the main loop
+function Run():
+    Initialize()         // SDL3, OpenGL context, ImGui context, layers
+
+    lastTime = SDL_GetTicks()
+
+    while not quit:
+        currentTime = SDL_GetTicks()
+        deltaTime = (currentTime - lastTime) / 1000.0f
+        lastTime = currentTime
+        deltaTime = clamp(deltaTime, 0.0, 0.1)   // cap to 100ms
+
+        // 1. Poll events
+        for each SDL_Event e in SDL_PollEvent():
+            ImGui_ImplSDL3_ProcessEvent(e)
+            if e.type == SDL_EVENT_QUIT: quit = true
+            for each layer in layerStack (reverse):
+                layer.OnEvent(e)
+                if event consumed: break
+
+        // 2. Update layers
+        for each layer in layerStack:
+            layer.OnUpdate(deltaTime)
+
+        // 3. ImGui frame
+        ImGui_ImplOpenGL3_NewFrame()
+        ImGui_ImplSDL3_NewFrame()
+        ImGui::NewFrame()
+
+        for each layer in layerStack:
+            layer.OnImGuiRender()
+
+        ImGui::Render()
+
+        // 4. Present
+        glViewport(0, 0, windowWidth, windowHeight)
+        glClearColor(0.1, 0.1, 0.1, 1.0)
+        glClear(GL_COLOR_BUFFER_BIT)
+
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData())
+
+        if ImGui IO has UpdateViewports flag:
+            ImGui::UpdatePlatformWindows()
+            ImGui::RenderPlatformWindowsDefault()
+
+        SDL_GL_SwapWindow(window)
+
+    Shutdown()
+```
+
+---
+
+## 8. Editor Loop Pseudocode
+
+```
+// EditorLayer::OnUpdate(dt)
+function OnUpdate(deltaTime):
+
+    // Handle editor camera pan/zoom only if viewport is hovered
+    if sceneViewportPanel.IsHovered():
+        editorCamera.ProcessInput(inputState, deltaTime)
+
+    // In MVP, no scene simulation during edit mode
+    // (Play mode update would call scene.OnRuntimeUpdate(dt) here)
+
+// EditorLayer::OnImGuiRender()
+function OnImGuiRender():
+
+    BeginDockspace()           // Full-screen invisible dockspace window
+
+    menuBar.Render()           // File, Edit, Project menus
+
+    for each panel in activePanels:
+        panel.OnImGuiRender(editorContext)
+
+    EndDockspace()
+
+// SceneViewportPanel::OnImGuiRender(ctx)
+function SceneViewportPanel_Render(ctx):
+
+    ImGui::Begin("Scene Viewport")
+
+    // Resize FBO if panel size changed
+    newSize = ImGui::GetContentRegionAvail()
+    if newSize != fboSize:
+        ctx.sceneFramebuffer.Resize(newSize.x, newSize.y)
+        ctx.editorCamera.SetViewportSize(newSize.x, newSize.y)
+        fboSize = newSize
+
+    // Render scene into FBO
+    ctx.sceneFramebuffer.Bind()
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    isoRenderer.RenderTilemap(ctx.activeScene, ctx.editorCamera)
+    ctx.sceneFramebuffer.Unbind()
+
+    // Display FBO texture in ImGui
+    textureID = ctx.sceneFramebuffer.GetColorTextureID()
+    ImGui::Image(textureID, fboSize, uv0=(0,1), uv1=(1,0))  // Y-flip UVs!
+
+    // Tile hover detection
+    if ImGui::IsItemHovered():
+        mousePos = ImGui::GetMousePos() - ImGui::GetItemRectMin()
+        hoveredTile = IsoMath::ScreenToGrid(mousePos, ctx.editorCamera)
+        DrawHoverHighlight(hoveredTile)
+
+    ImGui::End()
+```
+
+---
+
+## 9. OpenGL Framebuffer Inside ImGui
+
+### Why Y-Flip Is Required
+
+OpenGL's texture coordinate origin is bottom-left. ImGui's image coordinate origin is top-left. Without flipping, the scene renders upside-down.
+
+**Solution:** Pass `uv_min = ImVec2(0, 1)` and `uv_max = ImVec2(1, 0)` to `ImGui::Image()`.
+
+### Framebuffer Class Design
+
+```cpp
+// engine/include/engine/renderer/Framebuffer.h
+
+struct FramebufferSpec {
+    uint32_t width  = 1280;
+    uint32_t height = 720;
+};
+
+class Framebuffer {
+public:
+    explicit Framebuffer(const FramebufferSpec& spec);
+    ~Framebuffer();
+
+    // Non-copyable, movable
+    Framebuffer(const Framebuffer&)            = delete;
+    Framebuffer& operator=(const Framebuffer&) = delete;
+    Framebuffer(Framebuffer&&)                 = default;
+    Framebuffer& operator=(Framebuffer&&)      = default;
+
+    void Bind()   const;
+    void Unbind() const;
+    void Resize(uint32_t width, uint32_t height);
+
+    // Returns the OpenGL texture ID cast to ImTextureID
+    uint32_t GetColorAttachmentID() const { return m_ColorAttachment; }
+
+    const FramebufferSpec& GetSpec() const { return m_Spec; }
+
+private:
+    void Invalidate();  // Creates/recreates GL objects
+
+    FramebufferSpec m_Spec;
+    uint32_t m_FBO            = 0;
+    uint32_t m_ColorAttachment = 0;
+    uint32_t m_DepthAttachment = 0;
+};
+```
+
+### Framebuffer Creation (inside `Invalidate()`)
+
+```cpp
+void Framebuffer::Invalidate() {
+    if (m_FBO) {
+        glDeleteFramebuffers(1, &m_FBO);
+        glDeleteTextures(1, &m_ColorAttachment);
+        glDeleteRenderbuffers(1, &m_DepthAttachment);
+    }
+
+    glCreateFramebuffers(1, &m_FBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
+
+    // Color attachment
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_ColorAttachment);
+    glBindTexture(GL_TEXTURE_2D, m_ColorAttachment);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8,
+                 m_Spec.width, m_Spec.height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           GL_TEXTURE_2D, m_ColorAttachment, 0);
+
+    // Depth attachment (renderbuffer, not sampled)
+    glCreateRenderbuffers(1, &m_DepthAttachment);
+    glBindRenderbuffer(GL_RENDERBUFFER, m_DepthAttachment);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
+                          m_Spec.width, m_Spec.height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                              GL_RENDERBUFFER, m_DepthAttachment);
+
+    assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+```
+
+### ImGui Display
+
+```cpp
+// Inside SceneViewportPanel::OnImGuiRender()
+ImVec2 size = ImGui::GetContentRegionAvail();
+ImGui::Image(
+    reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(fbo.GetColorAttachmentID())),
+    size,
+    ImVec2(0.0f, 1.0f),   // UV top-left  → bottom of texture
+    ImVec2(1.0f, 0.0f)    // UV bot-right → top of texture
+);
+```
+
+---
+
+## 10. Isometric Rendering Module Design
+
+### Coordinate Systems
+
+IsoForge uses **2:1 isometric** (classic dimetric) projection. Each tile has pixel dimensions `TILE_W` × `TILE_H` where `TILE_H = TILE_W / 2`.
+
+```
+World Grid (col, row)   →   Screen (px, py)
+         ↑ depth increases diagonally
+```
+
+### Tile Rendering Order (Painter's Algorithm)
+
+Tiles must be drawn from **top-back to bottom-front**: iterate rows from smallest to largest, within each row iterate columns from smallest to largest.
+
+```cpp
+for (int row = 0; row < mapRows; ++row)
+    for (int col = 0; col < mapCols; ++col)
+        DrawTile(col, row);
+```
+
+For entities on tiles, sort by `(row + col)` ascending — same depth key used in Zelda-style games.
+
+### IsoRenderer Interface
+
+```cpp
+// engine/include/engine/iso/IsoRenderer.h
+class IsoRenderer {
+public:
+    void BeginScene(const IsoCamera& camera);
+    void DrawTile(int col, int row, int layer,
+                  std::shared_ptr<Texture> texture,
+                  const glm::vec4& tintColor = glm::vec4(1.0f));
+    void DrawGrid(int cols, int rows, const glm::vec4& color);
+    void DrawTileHighlight(int col, int row, const glm::vec4& color);
+    void EndScene();
+
+private:
+    // Batches quads and flushes in a single draw call per texture
+    struct QuadBatch { /* ... */ };
+};
+```
+
+---
+
+## 11. Isometric Math Functions
+
+All functions live in `engine/include/engine/iso/IsoMath.h` as a `namespace IsoMath`. They are **pure functions** with no side effects.
+
+```cpp
+namespace IsoMath {
+
+// Tile dimensions (configurable per project, but default values)
+constexpr float TILE_W = 64.0f;
+constexpr float TILE_H = 32.0f;
+
+// ─── Grid → World Space (center of tile) ───────────────────────────────────
+// Standard 2:1 isometric projection
+inline glm::vec2 GridToWorld(int col, int row) {
+    return {
+        (col - row) * (TILE_W * 0.5f),
+        (col + row) * (TILE_H * 0.5f)
+    };
+}
+
+// ─── World → Screen Space (apply camera transform) ─────────────────────────
+// camera.ViewProjection() is a 4x4 matrix, but for 2D we simplify:
+inline glm::vec2 WorldToScreen(const glm::vec2& worldPos,
+                                const IsoCamera& cam,
+                                const glm::vec2& viewportSize) {
+    glm::vec4 clip = cam.GetViewProjectionMatrix()
+                   * glm::vec4(worldPos.x, worldPos.y, 0.0f, 1.0f);
+    // NDC → screen
+    glm::vec2 ndc  = glm::vec2(clip) / clip.w;
+    return {
+        (ndc.x + 1.0f) * 0.5f * viewportSize.x,
+        (1.0f - ndc.y) * 0.5f * viewportSize.y   // Y flip
+    };
+}
+
+// ─── Screen → World (inverse camera) ───────────────────────────────────────
+inline glm::vec2 ScreenToWorld(const glm::vec2& screenPos,
+                                const IsoCamera& cam,
+                                const glm::vec2& viewportSize) {
+    // Convert screen → NDC
+    glm::vec2 ndc = {
+         (screenPos.x / viewportSize.x) * 2.0f - 1.0f,
+        -((screenPos.y / viewportSize.y) * 2.0f - 1.0f)
+    };
+    glm::vec4 worldH = glm::inverse(cam.GetViewProjectionMatrix())
+                     * glm::vec4(ndc, 0.0f, 1.0f);
+    return glm::vec2(worldH) / worldH.w;
+}
+
+// ─── Screen → Grid (tile coordinate) ──────────────────────────────────────
+inline glm::ivec2 ScreenToGrid(const glm::vec2& screenPos,
+                                const IsoCamera& cam,
+                                const glm::vec2& viewportSize) {
+    glm::vec2 w = ScreenToWorld(screenPos, cam, viewportSize);
+    // Inverse of GridToWorld:
+    //   w.x = (col - row) * TW/2   →  col - row = 2*w.x / TW
+    //   w.y = (col + row) * TH/2   →  col + row = 2*w.y / TH
+    float a = 2.0f * w.x / TILE_W;
+    float b = 2.0f * w.y / TILE_H;
+    return {
+        static_cast<int>(std::floor((a + b) * 0.5f)),   // col
+        static_cast<int>(std::floor((b - a) * 0.5f))    // row
+    };
+}
+
+// ─── Tile hover detection ───────────────────────────────────────────────────
+// Returns true if (screenPos) is inside the diamond of tile (col, row)
+inline bool IsMouseOverTile(const glm::vec2& screenPos,
+                             int col, int row,
+                             const IsoCamera& cam,
+                             const glm::vec2& viewportSize) {
+    glm::vec2 tileCenter = WorldToScreen(GridToWorld(col, row), cam, viewportSize);
+    glm::vec2 delta = screenPos - tileCenter;
+    // Diamond test: |dx|/TW + |dy|/TH <= 0.5
+    return (std::abs(delta.x) / TILE_W + std::abs(delta.y) / TILE_H) <= 0.5f;
+}
+
+// ─── Depth sort key ─────────────────────────────────────────────────────────
+// Lower key = drawn first (further back). For entities on tiles:
+inline int DepthKey(int col, int row, int layer = 0) {
+    return col + row + layer * 1000;
+}
+
+} // namespace IsoMath
+```
+
+---
+
+## 12. ECS Design Using EnTT
+
+### Entity Wrapper
+
+```cpp
+// engine/include/engine/scene/Entity.h
+class Entity {
+public:
+    Entity() = default;
+    Entity(entt::entity handle, Scene* scene)
+        : m_Handle(handle), m_Scene(scene) {}
+
+    template<typename T, typename... Args>
+    T& AddComponent(Args&&... args) {
+        assert(!HasComponent<T>() && "Entity already has component");
+        return m_Scene->GetRegistry().emplace<T>(m_Handle,
+                                                  std::forward<Args>(args)...);
+    }
+
+    template<typename T>
+    T& GetComponent() {
+        assert(HasComponent<T>() && "Entity does not have component");
+        return m_Scene->GetRegistry().get<T>(m_Handle);
+    }
+
+    template<typename T>
+    bool HasComponent() const {
+        return m_Scene->GetRegistry().all_of<T>(m_Handle);
+    }
+
+    template<typename T>
+    void RemoveComponent() {
+        m_Scene->GetRegistry().remove<T>(m_Handle);
+    }
+
+    bool IsValid() const {
+        return m_Scene && m_Scene->GetRegistry().valid(m_Handle);
+    }
+
+    operator entt::entity() const { return m_Handle; }
+    operator bool() const { return IsValid(); }
+
+private:
+    entt::entity m_Handle { entt::null };
+    Scene*       m_Scene  { nullptr };
+};
+```
+
+### Scene Class
+
+```cpp
+// engine/include/engine/scene/Scene.h
+class Scene {
+public:
+    Scene() = default;
+    ~Scene() = default;
+
+    Entity CreateEntity(const std::string& name = "Entity");
+    void   DestroyEntity(Entity entity);
+
+    // System updates (called each frame)
+    void OnEditorUpdate(float dt, const IsoCamera& cam);
+    void OnRuntimeUpdate(float dt);  // Future: Play mode
+
+    entt::registry& GetRegistry() { return m_Registry; }
+
+    // Iteration helpers for editor panels
+    template<typename... Components>
+    auto GetEntitiesWith() {
+        return m_Registry.view<Components...>();
+    }
+
+private:
+    entt::registry m_Registry;
+    std::string    m_Name { "Untitled Scene" };
+
+    friend class SceneSerializer;
+};
+```
+
+### Component Structs
+
+```cpp
+// engine/include/engine/scene/Components.h
+
+struct NameComponent {
+    std::string name { "Entity" };
+};
+
+struct TransformComponent {
+    glm::vec3 translation { 0.0f, 0.0f, 0.0f };
+    float     rotation    { 0.0f };            // degrees, Z axis
+    glm::vec2 scale       { 1.0f, 1.0f };
+
+    glm::mat4 GetTransform() const;
+};
+
+struct SpriteRendererComponent {
+    std::shared_ptr<Texture> texture { nullptr };
+    glm::vec4 color { 1.0f };    // tint / solid color if no texture
+    int sortingOrder { 0 };
+};
+
+struct TilemapComponent {
+    int    cols       { 20 };
+    int    rows       { 20 };
+    float  tileWidth  { 64.0f };
+    float  tileHeight { 32.0f };
+
+    // tile index → texture atlas ID (-1 = empty)
+    std::vector<int> tiles;
+
+    // Atlas texture used for all tiles in this map
+    std::shared_ptr<Texture> atlasTexture { nullptr };
+
+    // Atlas layout
+    int atlasTileCols { 8 };
+    int atlasTileRows { 8 };
+
+    int GetTile(int col, int row) const;
+    void SetTile(int col, int row, int tileID);
+};
+
+struct CameraComponent {
+    bool isPrimary { true };
+    // IsoCamera is in EditorContext for the editor camera.
+    // This CameraComponent is for runtime/game cameras only.
+};
+```
+
+---
+
+## 13. Serialization Design
+
+### `project.json`
+
+```json
+{
+  "name": "MyIsometricGame",
+  "version": "0.1.0",
+  "isoforge_version": "0.1.0",
+  "start_scene": "scenes/main.scene.json",
+  "assets_dir": "assets/",
+  "tile_width": 64,
+  "tile_height": 32
+}
+```
+
+### `scene.json`
+
+```json
+{
+  "scene": "Main",
+  "entities": [
+    {
+      "id": 1,
+      "components": {
+        "NameComponent":      { "name": "Tilemap" },
+        "TransformComponent": { "translation": [0,0,0], "rotation": 0, "scale": [1,1] },
+        "TilemapComponent": {
+          "cols": 20, "rows": 20,
+          "tile_width": 64, "tile_height": 32,
+          "atlas": "assets/tilesets/tileset01.png",
+          "atlas_tile_cols": 8, "atlas_tile_rows": 8,
+          "tiles": [0,0,1,1,2,0,0,1,...]
+        }
+      }
+    }
+  ]
+}
+```
+
+### `tilemap.json` (standalone, usable without full scene)
+
+```json
+{
+  "version": 1,
+  "cols": 20,
+  "rows": 20,
+  "tile_width": 64,
+  "tile_height": 32,
+  "atlas": "assets/tilesets/tileset01.png",
+  "atlas_tile_cols": 8,
+  "atlas_tile_rows": 8,
+  "tiles": [0,0,1,1,2,...]
+}
+```
+
+### Serializer Pattern
+
+```cpp
+// SceneSerializer uses nlohmann::json
+class SceneSerializer {
+public:
+    explicit SceneSerializer(Scene& scene) : m_Scene(scene) {}
+
+    void Serialize(const std::filesystem::path& path);
+    bool Deserialize(const std::filesystem::path& path);
+
+private:
+    void SerializeEntity(nlohmann::json& j, Entity entity);
+    void DeserializeEntity(const nlohmann::json& j, Scene& scene);
+
+    Scene& m_Scene;
+};
+```
+
+Use `nlohmann::json`'s `to_json` / `from_json` ADL for each component type.
+
+---
+
+## 14. Logging Design
+
+### spdlog Setup
+
+```cpp
+// engine/src/core/Log.cpp
+namespace Log {
+
+static std::shared_ptr<spdlog::logger> s_EngineLogger;
+static std::shared_ptr<spdlog::logger> s_EditorLogger;
+
+void Init() {
+    // Sink 1: colored stdout
+    auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    consoleSink->set_level(spdlog::level::trace);
+
+    // Sink 2: rotating file
+    auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+        "isoforge.log", 1024 * 1024 * 5, 3);
+
+    s_EngineLogger = std::make_shared<spdlog::logger>(
+        "ENGINE", spdlog::sinks_init_list{consoleSink, fileSink});
+    s_EditorLogger = std::make_shared<spdlog::logger>(
+        "EDITOR", spdlog::sinks_init_list{consoleSink, fileSink});
+
+    spdlog::register_logger(s_EngineLogger);
+    spdlog::register_logger(s_EditorLogger);
+    spdlog::set_level(spdlog::level::trace);
+}
+
+} // namespace Log
+
+#define LOG_ENGINE_INFO(...)  ::Log::GetEngineLogger()->info(__VA_ARGS__)
+#define LOG_ENGINE_WARN(...)  ::Log::GetEngineLogger()->warn(__VA_ARGS__)
+#define LOG_ENGINE_ERROR(...) ::Log::GetEngineLogger()->error(__VA_ARGS__)
+#define LOG_EDITOR_INFO(...)  ::Log::GetEditorLogger()->info(__VA_ARGS__)
+```
+
+### Console Panel Ring Buffer
+
+The `ConsolePanel` maintains its own `std::deque<LogEntry>` of up to 500 messages. A custom spdlog sink is registered in the editor (not in the engine) that pushes messages into this deque.
+
+```cpp
+// editor/include/editor/panels/ConsolePanel.h
+struct LogEntry {
+    spdlog::level::level_enum level;
+    std::string               message;
+    std::string               timestamp;
+};
+
+class ConsoleSink : public spdlog::sinks::base_sink<std::mutex> {
+public:
+    std::deque<LogEntry> entries;  // ConsolePanel reads this
+    static constexpr size_t MAX_ENTRIES = 500;
+protected:
+    void sink_it_(const spdlog::details::log_msg& msg) override;
+    void flush_() override {}
+};
+```
+
+---
+
+## 15. Asset System MVP
+
+### Design Goals for MVP
+
+- Load PNG/JPG textures via `stb_image`
+- Cache by absolute path string
+- No complex import pipeline, no `.meta` files yet
+- Path resolution relative to `project.assetsDir`
+
+### AssetManager
+
+```cpp
+// engine/include/engine/assets/AssetManager.h
+class AssetManager {
+public:
+    // Set once when project is opened
+    void SetProjectRoot(const std::filesystem::path& root);
+
+    // Returns cached texture or loads it.
+    // path is relative to project assets dir, e.g. "tilesets/grass.png"
+    std::shared_ptr<Texture> LoadTexture(const std::string& relativePath);
+
+    void ClearCache();
+
+private:
+    std::filesystem::path                               m_ProjectRoot;
+    std::unordered_map<std::string, std::shared_ptr<Texture>> m_TextureCache;
+
+    std::shared_ptr<Texture> LoadTextureFromDisk(
+        const std::filesystem::path& absPath);
+};
+```
+
+### Texture Class (RAII)
+
+```cpp
+class Texture {
+public:
+    Texture(uint32_t glID, int width, int height, const std::string& path)
+        : m_ID(glID), m_Width(width), m_Height(height), m_Path(path) {}
+
+    ~Texture() { if (m_ID) glDeleteTextures(1, &m_ID); }
+
+    Texture(const Texture&) = delete;
+    Texture& operator=(const Texture&) = delete;
+
+    uint32_t    GetID()     const { return m_ID;     }
+    int         GetWidth()  const { return m_Width;  }
+    int         GetHeight() const { return m_Height; }
+
+private:
+    uint32_t    m_ID     { 0 };
+    int         m_Width  { 0 };
+    int         m_Height { 0 };
+    std::string m_Path;
+};
+```
+
+---
+
+## 16. Editor Panels
+
+All panels implement this interface:
+
+```cpp
+// editor/include/editor/panels/Panel.h
+class Panel {
+public:
+    virtual ~Panel() = default;
+    virtual void OnImGuiRender(EditorContext& ctx) = 0;
+
+    bool isOpen { true };
+    const char* title { "Panel" };
+};
+```
+
+### `SceneViewportPanel`
+
+- **Owns:** `Framebuffer` (or receives it via `EditorContext`)
+- **Does:** Binds FBO → calls IsoRenderer → unbinds → `ImGui::Image()` → hover detection → tile painting if tool is Paint
+- **Input:** Mouse click inside panel → `IsoMath::ScreenToGrid()` → TilemapComponent::SetTile()
+
+### `HierarchyPanel`
+
+- **Does:** Iterates `scene.GetEntitiesWith<NameComponent>()` → renders selectable list → sets `ctx.selectedEntity`
+- **Context menu:** Right-click → "Create Entity", "Delete Entity"
+
+### `InspectorPanel`
+
+- **Does:** Checks `ctx.selectedEntity` → if valid, renders each component using `HasComponent<T>()` → editable fields via `ImGui::DragFloat`, `ImGui::ColorEdit4`, etc.
+- **Rule:** One `DrawComponent<T>()` template specialization per component type.
+
+### `AssetBrowserPanel`
+
+- **MVP:** Displays file tree of `project.assetsDir` using `std::filesystem::directory_iterator`
+- **Interaction:** Double-click PNG → `AssetManager::LoadTexture()` and assign to selected entity
+
+### `TilePalettePanel`
+
+- **Does:** Loads the active atlas texture → draws it as a grid → user clicks to select `activeToolTileID` in `EditorContext`
+- **State:** `ctx.tilePalette.selectedTileID` is set here and consumed by SceneViewportPanel
+
+### `ConsolePanel`
+
+- **Does:** Reads `ConsoleSink::entries` → renders with color coding (warn=yellow, error=red) → Clear button → auto-scroll toggle
+
+---
+
+## 17. CMake Project Structure
+
+### Root `CMakeLists.txt`
+
+```cmake
+cmake_minimum_required(VERSION 3.25)
+project(IsoForge VERSION 0.1.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Output directories
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+# Options
+option(ISOFORGE_BUILD_EDITOR "Build the editor" ON)
+option(ISOFORGE_ENABLE_ASAN  "Enable AddressSanitizer" OFF)
+
+add_subdirectory(third_party)
+add_subdirectory(engine)
+
+if(ISOFORGE_BUILD_EDITOR)
+    add_subdirectory(editor)
+endif()
+```
+
+### `engine/CMakeLists.txt`
+
+```cmake
+file(GLOB_RECURSE ENGINE_SOURCES "src/*.cpp")
+
+add_library(isoforge_engine STATIC ${ENGINE_SOURCES})
+
+target_include_directories(isoforge_engine
+    PUBLIC  include
+    PRIVATE src
+)
+
+target_link_libraries(isoforge_engine
+    PUBLIC
+        SDL3::SDL3
+        OpenGL::GL
+        glm::glm
+        EnTT::EnTT
+        nlohmann_json::nlohmann_json
+        spdlog::spdlog
+        stb
+)
+
+target_compile_features(isoforge_engine PUBLIC cxx_std_20)
+```
+
+### `editor/CMakeLists.txt`
+
+```cmake
+file(GLOB_RECURSE EDITOR_SOURCES "src/*.cpp")
+
+add_executable(isoforge_editor ${EDITOR_SOURCES})
+
+target_include_directories(isoforge_editor
+    PRIVATE include
+)
+
+target_link_libraries(isoforge_editor
+    PRIVATE
+        isoforge_engine
+        imgui
+        ImGuizmo
+)
+```
+
+### `CMakePresets.json`
+
+```json
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ISOFORGE_ENABLE_ASAN": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug",   "configurePreset": "debug"   },
+    { "name": "release", "configurePreset": "release" }
+  ]
+}
+```
+
+---
+
+## 18. Third-Party Dependency Management
+
+### Recommendation: Hybrid (Vendored ImGui + FetchContent for everything else)
+
+**Vendor into `third_party/` (copy source):**
+
+| Library | Reason |
+|---|---|
+| `imgui` (docking branch) | Requires a specific non-release branch; FetchContent is unreliable for branches; you'll modify `imgui_impl_*` files. |
+| `ImGuizmo` | Header-only, tiny, rarely updated. |
+| `stb` | Single headers, copy-paste is idiomatic. |
+
+**Use FetchContent (downloaded at configure time):**
+
+| Library | Reason |
+|---|---|
+| `SDL3` | Large binary, has proper CMake package, changes frequently. |
+| `glm` | Header-only, versioned tags, no modification needed. |
+| `EnTT` | Header-only, versioned, official CMake support. |
+| `nlohmann_json` | Header-only, versioned tags. |
+| `spdlog` | Has proper CMake, versioned, no modification. |
+
+### `third_party/CMakeLists.txt` skeleton
+
+```cmake
+include(FetchContent)
+
+# ── SDL3 ──────────────────────────────────────────────────────────────────
+FetchContent_Declare(SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.2.0
+    GIT_SHALLOW    TRUE
+)
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+set(SDL_STATIC ON  CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(SDL3)
+
+# ── GLM ───────────────────────────────────────────────────────────────────
+FetchContent_Declare(glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG        1.0.1
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(glm)
+
+# ── EnTT ──────────────────────────────────────────────────────────────────
+FetchContent_Declare(EnTT
+    GIT_REPOSITORY https://github.com/skypjack/entt.git
+    GIT_TAG        v3.13.2
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(EnTT)
+
+# ── nlohmann_json ─────────────────────────────────────────────────────────
+FetchContent_Declare(nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG        v3.11.3
+    GIT_SHALLOW    TRUE
+)
+set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(nlohmann_json)
+
+# ── spdlog ────────────────────────────────────────────────────────────────
+FetchContent_Declare(spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG        v1.14.1
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(spdlog)
+
+# ── ImGui (vendored) ──────────────────────────────────────────────────────
+add_library(imgui STATIC
+    imgui/imgui.cpp
+    imgui/imgui_draw.cpp
+    imgui/imgui_tables.cpp
+    imgui/imgui_widgets.cpp
+    imgui/backends/imgui_impl_sdl3.cpp
+    imgui/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(imgui PUBLIC imgui imgui/backends)
+target_link_libraries(imgui PUBLIC SDL3::SDL3 OpenGL::GL)
+
+# ── ImGuizmo (vendored) ───────────────────────────────────────────────────
+add_library(ImGuizmo STATIC ImGuizmo/ImGuizmo.cpp)
+target_include_directories(ImGuizmo PUBLIC ImGuizmo)
+target_link_libraries(ImGuizmo PUBLIC imgui)
+
+# ── stb (vendored header) ─────────────────────────────────────────────────
+add_library(stb INTERFACE)
+target_include_directories(stb INTERFACE stb)
+```
+
+---
+
+## 19. Performance Constraints
+
+### Hardware Profile
+
+| Component | Spec | Implication |
+|---|---|---|
+| CPU | Intel Core i3-6100 (2C/4T, 3.7 GHz) | Single-threaded bottleneck is fine. No heavy parallel jobs. |
+| GPU | NVIDIA GTX 750 Ti (640 CUDA, 2GB VRAM) | OpenGL 4.5 capable but we use 3.3. Max texture budget ≈ 1.5 GB. |
+| RAM | 8 GB | Keep runtime allocations lean. Avoid per-frame heap alloc. |
+| Storage | SSD (250 GB) | Fast asset loading. Still cache textures — don't reload each frame. |
+
+### Specific Guidelines
+
+**Rendering:**
+- Use a sprite batch (collect all draw calls, sort by texture, one `glDrawElements` per texture). On GTX 750 Ti, 1000 tiles at 64×32px is trivial. Target 60 FPS at 1080p.
+- Avoid per-frame `glBufferData`. Use `glBufferSubData` or persistent mapped buffers.
+- The FBO for the scene viewport should be at the viewport panel's actual pixel size, not the full window size.
+
+**Memory:**
+- Use `std::shared_ptr<Texture>` in the asset cache. When all references drop, the texture is deleted automatically.
+- `std::vector<int>` for the tilemap tile array. A 100×100 map = 10,000 ints = 40 KB. Fine.
+- Avoid `std::string` copies in hot paths. Use `std::string_view` for lookups.
+
+**CPU:**
+- `entt::registry::view<>()` iteration is cache-friendly. Trust it.
+- The editor is not a real-time game. 60 FPS is more than enough. Cap with `SDL_GL_SetSwapInterval(1)` (vsync).
+- ImGui itself is CPU-light. The ImGui draw data → GPU upload is the bottleneck, which is negligible.
+
+**Build time (i3-6100 has 4 threads):**
+- Use `Ninja` generator (parallel, faster than Make).
+- Use FetchContent with `GIT_SHALLOW TRUE` to minimize download time.
+- `add_library(isoforge_engine STATIC ...)` compiles once; only changed files recompile.
+
+---
+
+## 20. Coding Standards
+
+### C++20 Specifics
+
+- Use `[[nodiscard]]` on factory functions and getters that return important values.
+- Use `std::filesystem::path` for all file paths (never `std::string` for paths).
+- Use `std::span<T>` instead of `T*, size_t` pairs.
+- Designated initializers where they aid readability: `FramebufferSpec spec { .width=800, .height=600 }`.
+- Modules are NOT used (poor toolchain support as of 2024/2025 on Linux).
+
+### RAII Rules
+
+- Every OpenGL object (VAO, VBO, FBO, texture) must be wrapped in a class whose destructor calls the corresponding `glDelete*`.
+- No naked `new` or `delete`. Use `std::make_unique<>` and `std::make_shared<>`.
+- SDL resources wrapped in custom deleters: `std::unique_ptr<SDL_Window, SDL_DestroyWindow>`.
+
+### Architecture Rules
+
+| Rule | Rationale |
+|---|---|
+| Engine headers never include ImGui | Editor can depend on engine, not vice versa |
+| No global singletons (`static Instance()`) | Hard to test, creates hidden dependencies |
+| `EditorContext` is the only shared state in the editor | Single clear ownership |
+| Each panel in its own `.h` / `.cpp` file | Keeps files small, easy to navigate |
+| No class should exceed 300 lines | If it does, split it |
+| No `.cpp` file should exceed 500 lines | Split into subsystems |
+| Prefer composition over inheritance | Exception: `Panel` base and `Layer` base are intentional |
+| No `using namespace std;` in headers | Pollutes all includers |
+
+### Naming Conventions
+
+```
+PascalCase    → Classes, Structs, Enums
+camelCase     → Local variables, function parameters
+m_PascalCase  → Private member variables
+s_PascalCase  → Static member variables
+UPPER_SNAKE   → Macros, constexpr constants
+snake_case    → NOT used (C++ standard library only)
+```
+
+---
+
+## 21. Development Phases
+
+---
+
+### Phase 1 — SDL3 Window + OpenGL Context + ImGui Docking
+
+**Goal:** A window opens, ImGui docking works, panels are visible (empty boxes).
+
+**Files to create:**
+- `engine/src/core/Window.cpp` + `Window.h`
+- `engine/src/core/Application.cpp` + `Application.h`
+- `editor/src/main.cpp`
+- `editor/src/EditorApp.cpp` + `EditorApp.h`
+- `third_party/CMakeLists.txt`
+- Root `CMakeLists.txt`, `engine/CMakeLists.txt`, `editor/CMakeLists.txt`
+
+**Systems touched:** Platform, Build
+
+**Acceptance criteria:**
+- `cmake --preset debug && cmake --build build/debug` succeeds with zero warnings.
+- Running `./build/debug/bin/isoforge_editor` opens a window.
+- ImGui demo window is visible if `ISOFORGE_SHOW_IMGUI_DEMO=1` env var is set.
+- Dockspace fills the window (invisible dockspace window).
+- Closing the window exits cleanly (no crash, no leak reported by ASAN).
+
+**What NOT to do in this phase:**
+- Do not implement any panels yet.
+- Do not add EnTT, serialization, or rendering yet.
+- Do not implement the framebuffer yet.
+
+---
+
+### Phase 2 — Framebuffer + Isometric Grid Rendering
+
+**Goal:** A SceneViewportPanel renders an OpenGL FBO with a basic isometric grid. Camera pan and zoom work.
+
+**Files to create:**
+- `engine/src/renderer/Framebuffer.cpp` + `Framebuffer.h`
+- `engine/src/renderer/Shader.cpp` + `Shader.h`
+- `engine/src/renderer/VertexArray.cpp`, `VertexBuffer.cpp`, `IndexBuffer.cpp`
+- `engine/src/iso/IsoMath.h` (inline functions only)
+- `engine/src/iso/IsoCamera.cpp` + `IsoCamera.h`
+- `engine/src/iso/IsoRenderer.cpp` + `IsoRenderer.h`
+- `editor/src/panels/SceneViewportPanel.cpp` + `SceneViewportPanel.h`
+- `editor/src/panels/ConsolePanel.cpp` + `ConsolePanel.h`
+- `editor/src/EditorContext.h`
+
+**Systems touched:** Renderer, Iso, Editor Panels
+
+**Acceptance criteria:**
+- Isometric grid of 20×20 tiles renders inside the SceneViewportPanel.
+- Middle-mouse drag pans the camera.
+- Mouse scroll wheel zooms in/out.
+- Resizing the SceneViewportPanel resizes the FBO (no distortion).
+- ConsolePanel shows spdlog output.
+- `LOG_ENGINE_INFO("Hello")` appears in ConsolePanel.
+
+**What NOT to do:**
+- Do not add tile painting yet.
+- Do not add EnTT or any scene system yet.
+- Do not load textures yet (use solid colors only).
+
+---
+
+### Phase 3 — Tile Hover + Tile Coordinate Display
+
+**Goal:** Moving the mouse over the viewport shows which tile is hovered (console + on-screen label).
+
+**Files modified:**
+- `engine/src/iso/IsoMath.h` — add `ScreenToGrid()`, `IsMouseOverTile()`
+- `editor/src/panels/SceneViewportPanel.cpp` — hover detection
+
+**Acceptance criteria:**
+- A debug overlay shows `[col, row]` for the hovered tile.
+- Hover highlight (colored diamond outline) renders on the hovered tile.
+- Going off the grid shows no highlight.
+
+---
+
+### Phase 4 — Tile Atlas + TilePalettePanel + Tile Painting
+
+**Goal:** Load a tileset PNG. Select a tile in TilePalettePanel. Paint/erase tiles on the viewport.
+
+**Files to create:**
+- `engine/src/assets/AssetManager.cpp` + `AssetManager.h`
+- `engine/src/assets/TextureAsset.h`
+- `engine/src/renderer/Texture.cpp` + `Texture.h`
+- `editor/src/panels/TilePalettePanel.cpp` + `TilePalettePanel.h`
+
+**Systems touched:** Assets, Renderer, Editor Panels
+
+**Acceptance criteria:**
+- Can drag a PNG tileset into the asset folder and load it in TilePalettePanel.
+- Clicking a tile in TilePalettePanel selects it.
+- Left-click in viewport paints selected tile.
+- Right-click erases tile.
+- Tiles render with the correct atlas UV region.
+
+**What NOT to do:**
+- Do not add scene save/load yet.
+- Do not add EnTT yet.
+
+---
+
+### Phase 5 — Tilemap Data + Save/Load as JSON
+
+**Goal:** The painted tilemap is stored in a data structure and can be saved/loaded.
+
+**Files to create:**
+- `engine/src/serialization/TilemapSerializer.cpp` + `TilemapSerializer.h`
+- `editor/src/project/Project.cpp` + `Project.h`
+
+**Acceptance criteria:**
+- File → Save saves `tilemap.json` into the project folder.
+- File → Open loads `tilemap.json` and restores the painted tiles.
+- Restarting the editor and opening the project restores the tilemap.
+
+---
+
+### Phase 6 — EnTT Scene System + Hierarchy + Inspector
+
+**Goal:** Entities exist. The hierarchy and inspector panels work.
+
+**Files to create:**
+- `engine/src/scene/Scene.cpp` + `Scene.h`
+- `engine/src/scene/Entity.h`
+- `engine/src/scene/Components.h`
+- `engine/src/serialization/SceneSerializer.cpp` + `SceneSerializer.h`
+- `editor/src/panels/HierarchyPanel.cpp` + `HierarchyPanel.h`
+- `editor/src/panels/InspectorPanel.cpp` + `InspectorPanel.h`
+
+**Acceptance criteria:**
+- Creating an entity in HierarchyPanel adds it to the scene.
+- Selecting it in HierarchyPanel shows its components in InspectorPanel.
+- NameComponent, TransformComponent, SpriteRendererComponent all have editable fields.
+- Scene saves and loads via `scene.json`.
+
+---
+
+### Phase 7 — Asset Browser Panel
+
+**Goal:** The project's asset folder is browsable. Textures can be assigned to entities.
+
+**Files to create:**
+- `editor/src/panels/AssetBrowserPanel.cpp` + `AssetBrowserPanel.h`
+
+**Acceptance criteria:**
+- Shows file tree of `project/assets/`.
+- Double-click a PNG assigns it as the sprite texture of the selected entity.
+
+---
+
+## 22. Codex Task Generation Rules
+
+When Codex (or any AI coding assistant) implements a task, it must follow these rules:
+
+### Scope Rules
+
+1. **One task at a time.** Never implement features from the next phase.
+2. **No unrequested libraries.** Adding a new `FetchContent_Declare` requires explicit user approval.
+3. **No full rewrites.** If an existing file needs a change, use surgical edits, not replacement.
+4. **No mega files.** If a new file would exceed 300 lines, split it. Ask first.
+5. **No mixing layers.** Engine files must not include editor headers. Enforce at the `#include` level.
+
+### Code Quality Rules
+
+6. No raw owning pointers. `std::unique_ptr` or `std::shared_ptr` only.
+7. Every OpenGL resource must be in a RAII wrapper.
+8. Match the naming convention of the file being edited.
+9. Do not add `TODO` comments as placeholders — leave them empty or implement them.
+10. No commented-out code blocks in commits.
+
+### Output Format Rules
+
+Every Codex response for an implementation task must include:
+
+```
+## Task: [Task Name]
+## Phase: [Phase Number]
+
+### Files Created
+- path/to/file.h
+- path/to/file.cpp
+
+### Files Modified
+- path/to/existing.cpp — reason for change
+
+### Build Instructions
+```bash
+cmake --preset debug
+cmake --build build/debug --target isoforge_editor
+```
+
+### Manual Test Steps
+1. Run: ./build/debug/bin/isoforge_editor
+2. Expected: [specific visual/behavioral result]
+3. Verify: [what to check]
+
+### What Was NOT Implemented
+[List any scope intentionally deferred]
+```
+
+---
+
+## 23. First Implementation Task
+
+---
+
+### Task 1: SDL3 Window + OpenGL 3.3 Context
+
+**Phase:** 1
+**Goal:** Project builds. A resizable 1280×720 window opens with an OpenGL 3.3 Core Profile context. The window clears to a dark grey color each frame. Closing the window exits cleanly.
+
+---
+
+#### Files to Create
+
+**`CMakeLists.txt`** (root)
+```cmake
+cmake_minimum_required(VERSION 3.25)
+project(IsoForge VERSION 0.1.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+add_subdirectory(third_party)
+add_subdirectory(engine)
+add_subdirectory(editor)
+```
+
+**`third_party/CMakeLists.txt`**
+```cmake
+include(FetchContent)
+
+# SDL3
+FetchContent_Declare(SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.2.0
+    GIT_SHALLOW    TRUE
+)
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+set(SDL_STATIC ON  CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(SDL3)
+
+find_package(OpenGL REQUIRED)
+```
+
+**`engine/CMakeLists.txt`**
+```cmake
+add_library(isoforge_engine STATIC
+    src/core/Window.cpp
+    src/core/Application.cpp
+)
+target_include_directories(isoforge_engine PUBLIC include)
+target_link_libraries(isoforge_engine PUBLIC SDL3::SDL3 OpenGL::GL)
+target_compile_features(isoforge_engine PUBLIC cxx_std_20)
+```
+
+**`engine/include/engine/core/Window.h`**
+```cpp
+#pragma once
+#include <string>
+#include <memory>
+#include <SDL3/SDL.h>
+
+namespace IsoForge {
+
+struct WindowProps {
+    std::string title  { "IsoForge Editor" };
+    int         width  { 1280 };
+    int         height { 720 };
+};
+
+class Window {
+public:
+    explicit Window(const WindowProps& props = {});
+    ~Window();
+
+    Window(const Window&)            = delete;
+    Window& operator=(const Window&) = delete;
+
+    void PollEvents(bool& quit);
+    void SwapBuffers();
+
+    int  GetWidth()  const { return m_Width;  }
+    int  GetHeight() const { return m_Height; }
+
+    SDL_Window*   GetSDLWindow()    const { return m_Window;    }
+    SDL_GLContext GetGLContext()    const { return m_GLContext; }
+
+private:
+    SDL_Window*   m_Window    { nullptr };
+    SDL_GLContext m_GLContext { nullptr };
+    int           m_Width;
+    int           m_Height;
+};
+
+} // namespace IsoForge
+```
+
+**`engine/src/core/Window.cpp`**
+```cpp
+#include "engine/core/Window.h"
+#include <stdexcept>
+#include <SDL3/SDL_opengl.h>
+
+namespace IsoForge {
+
+Window::Window(const WindowProps& props)
+    : m_Width(props.width), m_Height(props.height)
+{
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        throw std::runtime_error(
+            std::string("SDL_Init failed: ") + SDL_GetError());
+    }
+
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
+                        SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+
+    m_Window = SDL_CreateWindow(
+        props.title.c_str(),
+        props.width, props.height,
+        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
+    );
+
+    if (!m_Window) {
+        throw std::runtime_error(
+            std::string("SDL_CreateWindow failed: ") + SDL_GetError());
+    }
+
+    m_GLContext = SDL_GL_CreateContext(m_Window);
+    if (!m_GLContext) {
+        throw std::runtime_error(
+            std::string("SDL_GL_CreateContext failed: ") + SDL_GetError());
+    }
+
+    SDL_GL_SetSwapInterval(1); // vsync
+}
+
+Window::~Window() {
+    if (m_GLContext) SDL_GL_DestroyContext(m_GLContext);
+    if (m_Window)    SDL_DestroyWindow(m_Window);
+    SDL_Quit();
+}
+
+void Window::PollEvents(bool& quit) {
+    SDL_Event e;
+    while (SDL_PollEvent(&e)) {
+        if (e.type == SDL_EVENT_QUIT) {
+            quit = true;
+        }
+        if (e.type == SDL_EVENT_WINDOW_RESIZED) {
+            m_Width  = e.window.data1;
+            m_Height = e.window.data2;
+        }
+    }
+}
+
+void Window::SwapBuffers() {
+    SDL_GL_SwapWindow(m_Window);
+}
+
+} // namespace IsoForge
+```
+
+**`engine/include/engine/core/Application.h`**
+```cpp
+#pragma once
+#include "engine/core/Window.h"
+
+namespace IsoForge {
+
+class Application {
+public:
+    explicit Application(const WindowProps& props = {});
+    virtual ~Application() = default;
+
+    void Run();
+
+protected:
+    virtual void OnInit()             {}
+    virtual void OnUpdate(float dt)   {}
+    virtual void OnRender()           {}
+    virtual void OnShutdown()         {}
+
+    Window& GetWindow() { return *m_Window; }
+
+private:
+    std::unique_ptr<Window> m_Window;
+    bool m_Running { false };
+};
+
+} // namespace IsoForge
+```
+
+**`engine/src/core/Application.cpp`**
+```cpp
+#include "engine/core/Application.h"
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_opengl.h>
+
+namespace IsoForge {
+
+Application::Application(const WindowProps& props)
+    : m_Window(std::make_unique<Window>(props))
+{}
+
+void Application::Run() {
+    m_Running = true;
+    OnInit();
+
+    uint64_t lastTime = SDL_GetTicks();
+
+    while (m_Running) {
+        uint64_t now = SDL_GetTicks();
+        float dt = static_cast<float>(now - lastTime) / 1000.0f;
+        dt = std::min(dt, 0.1f);
+        lastTime = now;
+
+        bool quit = false;
+        m_Window->PollEvents(quit);
+        if (quit) m_Running = false;
+
+        OnUpdate(dt);
+
+        glViewport(0, 0, m_Window->GetWidth(), m_Window->GetHeight());
+        glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        OnRender();
+        m_Window->SwapBuffers();
+    }
+
+    OnShutdown();
+}
+
+} // namespace IsoForge
+```
+
+**`editor/CMakeLists.txt`**
+```cmake
+add_executable(isoforge_editor
+    src/main.cpp
+    src/EditorApp.cpp
+)
+target_include_directories(isoforge_editor PRIVATE include)
+target_link_libraries(isoforge_editor PRIVATE isoforge_engine)
+```
+
+**`editor/include/editor/EditorApp.h`**
+```cpp
+#pragma once
+#include "engine/core/Application.h"
+
+namespace IsoForge {
+
+class EditorApp final : public Application {
+public:
+    EditorApp();
+    ~EditorApp() override = default;
+
+protected:
+    void OnInit()           override;
+    void OnUpdate(float dt) override;
+    void OnRender()         override;
+    void OnShutdown()       override;
+};
+
+} // namespace IsoForge
+```
+
+**`editor/src/EditorApp.cpp`**
+```cpp
+#include "editor/EditorApp.h"
+#include <SDL3/SDL.h>
+
+namespace IsoForge {
+
+EditorApp::EditorApp()
+    : Application(WindowProps{ "IsoForge Editor", 1280, 720 })
+{}
+
+void EditorApp::OnInit() {
+    // Phase 1: nothing to initialize yet.
+    // SDL_Log used deliberately before spdlog is set up.
+    SDL_Log("IsoForge Editor initialized.");
+}
+
+void EditorApp::OnUpdate(float /*dt*/) {}
+void EditorApp::OnRender()            {}
+void EditorApp::OnShutdown()          {
+    SDL_Log("IsoForge Editor shutting down.");
+}
+
+} // namespace IsoForge
+```
+
+**`editor/src/main.cpp`**
+```cpp
+#include "editor/EditorApp.h"
+#include <cstdlib>
+#include <stdexcept>
+#include <cstdio>
+
+int main() {
+    try {
+        IsoForge::EditorApp app;
+        app.Run();
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "Fatal error: %s\n", e.what());
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
+}
+```
+
+**`CMakePresets.json`**
+```json
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "debug",
+      "displayName": "Debug Linux",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug", "configurePreset": "debug" }
+  ]
+}
+```
+
+---
+
+#### Build Instructions
+
+```bash
+# Install Ninja if needed
+sudo pacman -S ninja
+
+# Configure + build
+cmake --preset debug
+cmake --build build/debug --target isoforge_editor -j$(nproc)
+
+# Run
+./build/debug/bin/isoforge_editor
+```
+
+---
+
+#### Manual Test Steps
+
+1. Build succeeds with zero compiler errors and zero warnings (`-Wall -Wextra` recommended).
+2. Running the binary opens a 1280×720 window titled **"IsoForge Editor"**.
+3. The window background is a dark grey (not black, not bright — the 0.12 clear color).
+4. The window is resizable. Dragging the corner resizes it cleanly.
+5. Clicking the window's ✕ closes it immediately with a clean exit (return code 0).
+6. No crash, no ASAN report.
+
+---
+
+#### What Was NOT Implemented in This Task
+
+- ImGui (Phase 1, Task 2)
+- Framebuffer (Phase 2)
+- Any rendering beyond `glClear`
+- Logging (spdlog added in Phase 1, Task 3)
+- Any panels
+- Any scene or ECS
+
+---
+
+*End of IsoForge Editor Technical Architecture Document v0.1.0-draft*

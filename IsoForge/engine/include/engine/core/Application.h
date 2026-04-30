@@ -18,12 +18,17 @@ public:
 
 protected:
     virtual void OnInit();
+    virtual void OnEvent(const SDL_Event& event);
     virtual void OnUpdate(float deltaTime);
     virtual void OnRender();
     virtual void OnShutdown();
 
+    void RequestQuit();
+
     [[nodiscard]] Window& GetWindow();
     [[nodiscard]] const Window& GetWindow() const;
+    [[nodiscard]] OpenGLContext& GetOpenGLContext();
+    [[nodiscard]] const OpenGLContext& GetOpenGLContext() const;
 
 private:
     Window m_window;

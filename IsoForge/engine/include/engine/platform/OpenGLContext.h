@@ -15,6 +15,8 @@ public:
     OpenGLContext(const OpenGLContext&) = delete;
     OpenGLContext& operator=(const OpenGLContext&) = delete;
 
+    [[nodiscard]] SDL_GLContext GetNativeContext() const;
+
 private:
     SDL_Window* m_window;
     SDL_GLContext m_context;

@@ -32,7 +32,7 @@ void Application::Run()
 
         const float deltaTime = std::min(elapsed.count(), 0.1f);
 
-        m_window.PollEvents(m_shouldClose);
+        m_window.PollEvents(m_shouldClose, [this](const SDL_Event& event) { OnEvent(event); });
         OnUpdate(deltaTime);
 
         glViewport(0, 0, m_window.GetWidth(), m_window.GetHeight());
@@ -50,6 +50,10 @@ void Application::OnInit()
 {
 }
 
+void Application::OnEvent(const SDL_Event&)
+{
+}
+
 void Application::OnUpdate(float)
 {
 }
@@ -62,6 +66,11 @@ void Application::OnShutdown()
 {
 }
 
+void Application::RequestQuit()
+{
+    m_shouldClose = true;
+}
+
 Window& Application::GetWindow()
 {
     return m_window;
@@ -70,5 +79,15 @@ Window& Application::GetWindow()
 const Window& Application::GetWindow() const
 {
     return m_window;
+}
+
+OpenGLContext& Application::GetOpenGLContext()
+{
+    return *m_context;
+}
+
+const OpenGLContext& Application::GetOpenGLContext() const
+{
+    return *m_context;
 }
 }

@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <functional>
 #include <string>
 
 namespace IsoForge
@@ -16,7 +17,7 @@ public:
     Window& operator=(const Window&) = delete;
 
     void Create(const std::string& title, int width, int height);
-    void PollEvents(bool& shouldClose);
+    void PollEvents(bool& shouldClose, const std::function<void(const SDL_Event&)>& eventCallback);
     void SwapBuffers() const;
 
     [[nodiscard]] int GetWidth() const;

@@ -46,11 +46,16 @@ Window::~Window()
     SDL_Quit();
 }
 
-void Window::PollEvents(bool& shouldClose)
+void Window::PollEvents(bool& shouldClose, const std::function<void(const SDL_Event&)>& eventCallback)
 {
     SDL_Event event;
     while (SDL_PollEvent(&event))
     {
+        if (eventCallback)
+        {
+            eventCallback(event);
+        }
+
         if (event.type == SDL_EVENT_QUIT)
         {
             shouldClose = true;

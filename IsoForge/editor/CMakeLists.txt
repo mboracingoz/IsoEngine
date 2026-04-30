@@ -1,6 +1,7 @@
 add_executable(isoforge_editor
     src/main.cpp
     src/EditorApp.cpp
+    src/ImGuiLayer.cpp
 )
 
 target_include_directories(isoforge_editor
@@ -11,4 +12,5 @@ target_include_directories(isoforge_editor
 target_link_libraries(isoforge_editor
     PRIVATE
         isoforge_engine
+        imgui
 )

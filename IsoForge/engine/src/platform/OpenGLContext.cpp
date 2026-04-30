@@ -80,4 +80,9 @@ OpenGLContext::~OpenGLContext()
         m_context = nullptr;
     }
 }
+
+SDL_GLContext OpenGLContext::GetNativeContext() const
+{
+    return m_context;
+}
 }

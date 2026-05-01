@@ -237,6 +237,10 @@ In MVP, depth sorting can be implemented as a simple sort before the render loop
 
 ## Layer Support
 
+Phase 3A note:
+- `TilemapData` is introduced as engine-side storage only.
+- At this stage it only stores tile IDs for a fixed-size grid; it does not imply painting, rendering filled tiles, asset loading, or serialization yet.
+
 The tilemap supports multiple layers. Each layer is rendered separately, with all tiles in one layer drawn before the next layer begins.
 
 Layer ordering:

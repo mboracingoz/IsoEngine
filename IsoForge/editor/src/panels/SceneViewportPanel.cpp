@@ -64,6 +64,10 @@ void SceneViewportPanel::OnImGuiRender()
         ImGui::TextUnformatted(offsetBuffer);
         ImGui::Text("Zoom: %.2f", m_EditorCamera.GetZoom());
         ImGui::TextUnformatted("Shortcut: R = Reset Camera");
+        ImGui::Text("Tilemap Size: %d x %d", m_Tilemap.GetColumns(), m_Tilemap.GetRows());
+        ImGui::Text("Tile Count: %d", m_Tilemap.GetTileCount());
+        ImGui::Text("Filled Tiles: %d", m_Tilemap.GetFilledTileCount());
+        ImGui::Text("Empty Tile ID: %d", TilemapData::EmptyTile);
 
         const ImVec2 viewportSize = ImGui::GetContentRegionAvail();
         if (viewportSize.x > 0.0f && viewportSize.y > 0.0f)
@@ -84,8 +88,8 @@ void SceneViewportPanel::OnImGuiRender()
             m_Framebuffer.Bind();
             m_Framebuffer.Clear(0.08f, 0.10f, 0.14f, 1.0f);
             m_IsoGridRenderer.DrawGrid(
-                20,
-                20,
+                m_Tilemap.GetColumns(),
+                m_Tilemap.GetRows(),
                 tileWidth,
                 tileHeight,
                 originX,
@@ -156,8 +160,8 @@ void SceneViewportPanel::OnImGuiRender()
                     1.0f,
                     tileWidth,
                     tileHeight,
-                    20,
-                    20
+                    m_Tilemap.GetColumns(),
+                    m_Tilemap.GetRows()
                 );
             }
 

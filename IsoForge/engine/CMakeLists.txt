@@ -4,6 +4,7 @@ add_library(isoforge_engine STATIC
     src/core/Application.cpp
     src/renderer/Framebuffer.cpp
     src/iso/IsoGridRenderer.cpp
+    src/iso/TilemapData.cpp
 )
 
 target_include_directories(isoforge_engine

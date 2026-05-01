@@ -1,5 +1,6 @@
 #pragma once
 
+#include "editor/EditorState.h"
 #include "editor/ImGuiLayer.h"
 #include "editor/panels/AssetBrowserPanel.h"
 #include "editor/panels/ConsolePanel.h"
@@ -27,6 +28,7 @@ private:
     void RenderDockspace();
     void RenderAboutWindow();
 
+    EditorState m_EditorState;
     ImGuiLayer m_ImGuiLayer;
     SceneViewportPanel m_SceneViewportPanel;
     HierarchyPanel m_HierarchyPanel;

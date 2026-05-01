@@ -246,6 +246,11 @@ Phase 3B note:
 - In this phase, `LMB` sets the hovered tile to ID `1` and `RMB` clears it back to `EmptyTile`.
 - This is not the final tile palette or textured tile workflow.
 
+Phase 3C note:
+- `TilePalettePanel` now selects debug tile IDs `1` through `4`.
+- `SceneViewportPanel` paints with the currently selected debug tile ID instead of a hardcoded value.
+- This is still temporary and will later be replaced by the real texture / tileset workflow.
+
 The tilemap supports multiple layers. Each layer is rendered separately, with all tiles in one layer drawn before the next layer begins.
 
 Layer ordering:

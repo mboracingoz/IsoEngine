@@ -10,6 +10,14 @@ namespace IsoForge
 {
 namespace
 {
+struct DebugTileColor
+{
+    float r;
+    float g;
+    float b;
+    float a;
+};
+
 template <typename TextureID = ImTextureID>
 TextureID ToImTextureID(uint32_t textureID)
 {
@@ -22,10 +30,28 @@ TextureID ToImTextureID(uint32_t textureID)
         return static_cast<TextureID>(textureID);
     }
 }
+
+DebugTileColor GetDebugTileColor(int tileId)
+{
+    switch (tileId)
+    {
+    case 1:
+        return {0.18f, 0.45f, 0.75f, 0.45f};
+    case 2:
+        return {0.20f, 0.70f, 0.35f, 0.45f};
+    case 3:
+        return {0.85f, 0.55f, 0.20f, 0.45f};
+    case 4:
+        return {0.75f, 0.25f, 0.65f, 0.45f};
+    default:
+        return {0.50f, 0.50f, 0.50f, 0.45f};
+    }
+}
 }
 
-SceneViewportPanel::SceneViewportPanel()
+SceneViewportPanel::SceneViewportPanel(EditorState& editorState)
     : Panel("Scene Viewport")
+    , m_EditorState(editorState)
     , m_Framebuffer(FramebufferSpec{1280, 720})
 {
 }
@@ -75,8 +101,10 @@ void SceneViewportPanel::OnImGuiRender()
             {
                 for (int x = 0; x < m_Tilemap.GetColumns(); ++x)
                 {
-                    if (m_Tilemap.GetTile(x, y) != TilemapData::EmptyTile)
+                    const int tileId = m_Tilemap.GetTile(x, y);
+                    if (tileId != TilemapData::EmptyTile)
                     {
+                        const DebugTileColor color = GetDebugTileColor(tileId);
                         m_IsoGridRenderer.DrawFilledTile(
                             x,
                             y,
@@ -86,10 +114,10 @@ void SceneViewportPanel::OnImGuiRender()
                             originY,
                             viewportWidth,
                             viewportHeight,
-                            0.18f,
-                            0.45f,
-                            0.75f,
-                            0.45f
+                            color.r,
+                            color.g,
+                            color.b,
+                            color.a
                         );
                     }
                 }
@@ -177,7 +205,11 @@ void SceneViewportPanel::OnImGuiRender()
             {
                 if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                 {
-                    m_Tilemap.SetTile(currentHoverResult.tile.x, currentHoverResult.tile.y, 1);
+                    m_Tilemap.SetTile(
+                        currentHoverResult.tile.x,
+                        currentHoverResult.tile.y,
+                        m_EditorState.selectedDebugTileId
+                    );
                 }
 
                 if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
@@ -208,8 +240,8 @@ void SceneViewportPanel::OnImGuiRender()
         ImGui::Text("Tile Count: %d", m_Tilemap.GetTileCount());
         ImGui::Text("Filled Tiles: %d", m_Tilemap.GetFilledTileCount());
         ImGui::Text("Empty Tile ID: %d", TilemapData::EmptyTile);
-        ImGui::Text("Debug Paint Tile ID: 1");
-        ImGui::TextUnformatted("LMB: Paint debug tile");
+        ImGui::Text("Selected Debug Tile ID: %d", m_EditorState.selectedDebugTileId);
+        ImGui::TextUnformatted("LMB: Paint selected debug tile");
         ImGui::TextUnformatted("RMB: Clear tile");
         ImGui::TextUnformatted("MMB Drag: Pan");
         ImGui::TextUnformatted("Mouse Wheel: Zoom");

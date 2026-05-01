@@ -144,13 +144,41 @@ void SceneViewportPanel::OnImGuiRender()
         ImVec2 imageMax = ImVec2(0.0f, 0.0f);
         Vec2 viewportLocalMouse {};
         HoverResult currentHoverResult {};
+        const char* hoveredTileLabel = m_HoverResult.isValid ? nullptr : "none";
+
+        if (m_HoverResult.isValid)
+        {
+            ImGui::Text(
+                "Hovered Tile: %d,%d | Zoom: %.2f | Selected Tile: %d",
+                m_HoverResult.tile.x,
+                m_HoverResult.tile.y,
+                m_EditorCamera.GetZoom(),
+                m_EditorState.selectedDebugTileId
+            );
+        }
+        else
+        {
+            ImGui::Text(
+                "Hovered Tile: %s | Zoom: %.2f | Selected Tile: %d",
+                hoveredTileLabel,
+                m_EditorCamera.GetZoom(),
+                m_EditorState.selectedDebugTileId
+            );
+        }
 
         if (ImGui::Button("Reset Camera"))
         {
             m_EditorCamera.Reset();
         }
 
-        const ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+        const float collapsedSectionReserve = 2.0f * ImGui::GetFrameHeightWithSpacing();
+        ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+        viewportSize.y -= collapsedSectionReserve;
+        if (viewportSize.y < 0.0f)
+        {
+            viewportSize.y = 0.0f;
+        }
+
         if (viewportSize.x > 0.0f && viewportSize.y > 0.0f)
         {
             const uint32_t width = static_cast<uint32_t>(viewportSize.x);
@@ -297,44 +325,58 @@ void SceneViewportPanel::OnImGuiRender()
             ImGui::TextUnformatted("Scene viewport is too small to display the framebuffer.");
         }
 
-        char offsetBuffer[128] = {};
-        std::snprintf(
-            offsetBuffer,
-            sizeof(offsetBuffer),
-            "Camera Offset: %.1f, %.1f",
-            m_EditorCamera.GetOffsetX(),
-            m_EditorCamera.GetOffsetY()
-        );
-        ImGui::TextUnformatted(offsetBuffer);
-        ImGui::Text("Zoom: %.2f", m_EditorCamera.GetZoom());
-        ImGui::Text("Tilemap Size: %d x %d", m_Tilemap.GetColumns(), m_Tilemap.GetRows());
-        ImGui::Text("Tile Count: %d", m_Tilemap.GetTileCount());
-        ImGui::Text("Filled Tiles: %d", m_Tilemap.GetFilledTileCount());
-        ImGui::Text("Empty Tile ID: %d", TilemapData::EmptyTile);
-        ImGui::Text("Selected Debug Tile ID: %d", m_EditorState.selectedDebugTileId);
-        ImGui::Text(
-            "Current Tilemap Path: %s",
-            m_CurrentTilemapPath.empty() ? "(none)" : m_CurrentTilemapPath.generic_string().c_str()
-        );
-        ImGui::Text("Tilemap Directory: %s", GetTilemapDirectory().generic_string().c_str());
-        ImGui::TextUnformatted(m_LastTilemapIOStatus.c_str());
-        ImGui::TextUnformatted("LMB: Paint selected debug tile");
-        ImGui::TextUnformatted("RMB: Clear tile");
-        ImGui::TextUnformatted("MMB Drag: Pan");
-        ImGui::TextUnformatted("Mouse Wheel: Zoom");
-        ImGui::TextUnformatted("R: Reset Camera");
-        ImGui::Text("Viewport hovered: %s", viewportHovered ? "true" : "false");
-        ImGui::Text("Viewport focused: %s", viewportFocused ? "true" : "false");
-        ImGui::Text("Mouse local position: %.1f, %.1f", viewportLocalMouse.x, viewportLocalMouse.y);
-        ImGui::Text("Hover valid: %s", currentHoverResult.isValid ? "true" : "false");
-        ImGui::Text("Hovered tile: %d, %d", currentHoverResult.tile.x, currentHoverResult.tile.y);
-        ImGui::Text(
-            "Image Rect: Min(%.1f, %.1f) Max(%.1f, %.1f)",
-            imageMin.x,
-            imageMin.y,
-            imageMax.x,
-            imageMax.y
-        );
+        if (ImGui::CollapsingHeader("Debug Info"))
+        {
+            char offsetBuffer[128] = {};
+            std::snprintf(
+                offsetBuffer,
+                sizeof(offsetBuffer),
+                "Camera Offset: %.1f, %.1f",
+                m_EditorCamera.GetOffsetX(),
+                m_EditorCamera.GetOffsetY()
+            );
+            ImGui::Text("Viewport hovered: %s", viewportHovered ? "true" : "false");
+            ImGui::Text("Mouse local position: %.1f, %.1f", viewportLocalMouse.x, viewportLocalMouse.y);
+            ImGui::Text("Hover valid: %s", currentHoverResult.isValid ? "true" : "false");
+            if (currentHoverResult.isValid)
+            {
+                ImGui::Text("Hovered tile: %d, %d", currentHoverResult.tile.x, currentHoverResult.tile.y);
+            }
+            else
+            {
+                ImGui::TextUnformatted("Hovered tile: none");
+            }
+            ImGui::TextUnformatted(offsetBuffer);
+            ImGui::Text("Zoom: %.2f", m_EditorCamera.GetZoom());
+            ImGui::Text("Tilemap Size: %d x %d", m_Tilemap.GetColumns(), m_Tilemap.GetRows());
+            ImGui::Text("Tile Count: %d", m_Tilemap.GetTileCount());
+            ImGui::Text("Filled Tiles: %d", m_Tilemap.GetFilledTileCount());
+            ImGui::Text("Empty Tile ID: %d", TilemapData::EmptyTile);
+            ImGui::Text("Selected Debug Tile ID: %d", m_EditorState.selectedDebugTileId);
+            ImGui::Text(
+                "Current Tilemap Path: %s",
+                m_CurrentTilemapPath.empty() ? "(none)" : m_CurrentTilemapPath.generic_string().c_str()
+            );
+            ImGui::Text("Tilemap Directory: %s", GetTilemapDirectory().generic_string().c_str());
+            ImGui::TextUnformatted(m_LastTilemapIOStatus.c_str());
+            ImGui::Text("Viewport focused: %s", viewportFocused ? "true" : "false");
+            ImGui::Text(
+                "Image Rect: Min(%.1f, %.1f) Max(%.1f, %.1f)",
+                imageMin.x,
+                imageMin.y,
+                imageMax.x,
+                imageMax.y
+            );
+        }
+
+        if (ImGui::CollapsingHeader("Controls"))
+        {
+            ImGui::TextUnformatted("LMB: Paint selected debug tile");
+            ImGui::TextUnformatted("RMB: Clear tile");
+            ImGui::TextUnformatted("MMB Drag: Pan");
+            ImGui::TextUnformatted("Mouse Wheel: Zoom");
+            ImGui::TextUnformatted("R: Reset Camera");
+        }
     }
 
     ImGui::End();

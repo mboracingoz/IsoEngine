@@ -255,3 +255,45 @@ TilemapSerializer::Deserialize(filePath) → TilemapComponent
 ```
 
 Serializers return a bool or a result type indicating success or failure. They do not throw.
+
+---
+
+## Phase 3D MVP Note
+
+Phase 3D adds a temporary tilemap-only JSON save/load path for the current debug editor workflow. This is not the final scene serialization system and does not serialize ECS state, scene hierarchy, assets, or editor layout.
+
+Fixed MVP file path:
+- `sandbox_project/tilemaps/debug_tilemap.json`
+
+Current debug tilemap JSON shape:
+
+```json
+{
+  "version": 1,
+  "columns": 20,
+  "rows": 20,
+  "empty_tile": -1,
+  "tiles": [-1, -1, 1, 2]
+}
+```
+
+Notes:
+- `tiles` remains a flat row-major array.
+- The array length must equal `columns * rows`.
+- Load/save currently applies only to `TilemapData`.
+- Final scene serialization and asset-backed tile workflows remain future work.
+
+## Phase 3E Project-Local UX Note
+
+Phase 3E keeps tilemap JSON save/load limited to the project-local folder:
+- `sandbox_project/tilemaps/`
+
+Current editor UX:
+- `File > Save Tilemap` saves to the current tilemap path if one exists.
+- `File > Save Tilemap As...` opens a small ImGui modal and saves to `sandbox_project/tilemaps/<name>.json`.
+- `File > Load Tilemap` opens a small ImGui modal that lists available `.json` files from `sandbox_project/tilemaps/`.
+
+Notes:
+- This is still tilemap-only save/load, not full scene serialization.
+- No native file dialog is used in this phase.
+- Tilemap files stay inside the project tilemaps directory for now.

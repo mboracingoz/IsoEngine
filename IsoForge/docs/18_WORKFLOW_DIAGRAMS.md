@@ -130,6 +130,15 @@ Phase 2D note:
 - Hovered tile detection converts the mouse position from framebuffer-image space into viewport-local coordinates, then into engine-side isometric grid coordinates.
 - The hovered tile highlight may be rendered from the previous frame's stored hover result so the framebuffer pass can still run before `ImGui::Image()`.
 
+Phase 3D note:
+- `File > Save Tilemap` and `File > Load Tilemap` currently operate only on the active debug `TilemapData` using the fixed MVP path `sandbox_project/tilemaps/debug_tilemap.json`.
+- This workflow is intentionally tilemap-only and is not the final scene serialization pipeline.
+
+Phase 3E note:
+- `File > Save Tilemap` now reuses the current tilemap path when available.
+- `File > Save Tilemap As...` and `File > Load Tilemap` use small ImGui modals scoped to `sandbox_project/tilemaps/`.
+- The active tilemap path is editor-visible, but this remains project-local tilemap save/load rather than full scene persistence.
+
 ---
 
 ## 4 — Isometric Tile Painting Workflow

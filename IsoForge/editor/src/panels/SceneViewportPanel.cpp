@@ -1,9 +1,12 @@
 #include "editor/panels/SceneViewportPanel.h"
 
+#include "engine/serialization/TilemapSerializer.h"
+
 #include <imgui.h>
 
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <type_traits>
 
 namespace IsoForge
@@ -54,6 +57,74 @@ SceneViewportPanel::SceneViewportPanel(EditorState& editorState)
     , m_EditorState(editorState)
     , m_Framebuffer(FramebufferSpec{1280, 720})
 {
+}
+
+bool SceneViewportPanel::SaveTilemap()
+{
+    if (m_CurrentTilemapPath.empty())
+    {
+        m_LastTilemapIOStatus = "Tilemap IO: Save failed (no current tilemap path)";
+        return false;
+    }
+
+    return SaveTilemapAs(m_CurrentTilemapPath);
+}
+
+bool SceneViewportPanel::SaveTilemap(const std::filesystem::path& path)
+{
+    return SaveTilemapAs(path);
+}
+
+bool SceneViewportPanel::SaveTilemapAs(const std::filesystem::path& path)
+{
+    const bool saved = TilemapSerializer::SaveToFile(m_Tilemap, path);
+    if (saved)
+    {
+        m_CurrentTilemapPath = path;
+        m_LastTilemapIOStatus = "Tilemap IO: Saved to " + path.generic_string();
+    }
+    else
+    {
+        m_LastTilemapIOStatus = "Tilemap IO: Save failed";
+    }
+
+    return saved;
+}
+
+bool SceneViewportPanel::LoadTilemap(const std::filesystem::path& path)
+{
+    const bool loaded = TilemapSerializer::LoadFromFile(m_Tilemap, path);
+    if (loaded)
+    {
+        m_CurrentTilemapPath = path;
+        m_LastTilemapIOStatus = "Tilemap IO: Loaded from " + path.generic_string();
+    }
+    else
+    {
+        m_LastTilemapIOStatus = "Tilemap IO: Load failed";
+    }
+
+    return loaded;
+}
+
+bool SceneViewportPanel::HasCurrentTilemapPath() const
+{
+    return !m_CurrentTilemapPath.empty();
+}
+
+const std::filesystem::path& SceneViewportPanel::GetCurrentTilemapPath() const
+{
+    return m_CurrentTilemapPath;
+}
+
+const std::string& SceneViewportPanel::GetLastTilemapIOStatus() const
+{
+    return m_LastTilemapIOStatus;
+}
+
+std::filesystem::path SceneViewportPanel::GetTilemapDirectory()
+{
+    return "sandbox_project/tilemaps";
 }
 
 void SceneViewportPanel::OnImGuiRender()
@@ -241,6 +312,12 @@ void SceneViewportPanel::OnImGuiRender()
         ImGui::Text("Filled Tiles: %d", m_Tilemap.GetFilledTileCount());
         ImGui::Text("Empty Tile ID: %d", TilemapData::EmptyTile);
         ImGui::Text("Selected Debug Tile ID: %d", m_EditorState.selectedDebugTileId);
+        ImGui::Text(
+            "Current Tilemap Path: %s",
+            m_CurrentTilemapPath.empty() ? "(none)" : m_CurrentTilemapPath.generic_string().c_str()
+        );
+        ImGui::Text("Tilemap Directory: %s", GetTilemapDirectory().generic_string().c_str());
+        ImGui::TextUnformatted(m_LastTilemapIOStatus.c_str());
         ImGui::TextUnformatted("LMB: Paint selected debug tile");
         ImGui::TextUnformatted("RMB: Clear tile");
         ImGui::TextUnformatted("MMB Drag: Pan");

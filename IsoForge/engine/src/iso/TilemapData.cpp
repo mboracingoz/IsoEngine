@@ -60,6 +60,11 @@ int TilemapData::GetTile(int x, int y) const
     return m_Tiles[static_cast<size_t>(index)];
 }
 
+const std::vector<int>& TilemapData::GetTiles() const
+{
+    return m_Tiles;
+}
+
 void TilemapData::SetTile(int x, int y, int tileId)
 {
     const int index = GetIndex(x, y);
@@ -79,5 +84,24 @@ void TilemapData::ClearTile(int x, int y)
 void TilemapData::ClearAll()
 {
     std::ranges::fill(m_Tiles, EmptyTile);
+}
+
+bool TilemapData::ReplaceTiles(int columns, int rows, const std::vector<int>& tiles)
+{
+    if (columns <= 0 || rows <= 0)
+    {
+        return false;
+    }
+
+    const size_t expectedTileCount = static_cast<size_t>(columns) * static_cast<size_t>(rows);
+    if (tiles.size() != expectedTileCount)
+    {
+        return false;
+    }
+
+    m_Columns = columns;
+    m_Rows = rows;
+    m_Tiles = tiles;
+    return true;
 }
 }

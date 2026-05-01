@@ -46,6 +46,18 @@ set(SDL_TESTS OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(SDL3)
 
+FetchContent_Declare(nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+)
+
+set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+set(JSON_Install OFF CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(nlohmann_json)
+
 add_library(imgui STATIC
     imgui/imgui.cpp
     imgui/imgui_draw.cpp

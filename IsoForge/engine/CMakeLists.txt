@@ -5,6 +5,7 @@ add_library(isoforge_engine STATIC
     src/renderer/Framebuffer.cpp
     src/iso/IsoGridRenderer.cpp
     src/iso/TilemapData.cpp
+    src/serialization/TilemapSerializer.cpp
 )
 
 target_include_directories(isoforge_engine
@@ -16,6 +17,7 @@ target_link_libraries(isoforge_engine
     PUBLIC
         SDL3::SDL3
         glad
+        nlohmann_json::nlohmann_json
 )
 
 target_compile_features(isoforge_engine PUBLIC cxx_std_20)

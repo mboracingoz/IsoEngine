@@ -200,6 +200,36 @@ void AppendDiamondOutline(
     AppendLine(vertices, bottom, left, originX, originY, viewportWidth, viewportHeight, r, g, b, a);
     AppendLine(vertices, left, top, originX, originY, viewportWidth, viewportHeight, r, g, b, a);
 }
+
+void AppendFilledDiamond(
+    std::vector<LineVertex>& vertices,
+    int gridX,
+    int gridY,
+    float tileWidth,
+    float tileHeight,
+    float originX,
+    float originY,
+    float viewportWidth,
+    float viewportHeight,
+    float r,
+    float g,
+    float b,
+    float a
+)
+{
+    const Vec2 top = IsoMath::GridToWorld(gridX, gridY, tileWidth, tileHeight);
+    const Vec2 right = IsoMath::GridToWorld(gridX + 1, gridY, tileWidth, tileHeight);
+    const Vec2 bottom = IsoMath::GridToWorld(gridX + 1, gridY + 1, tileWidth, tileHeight);
+    const Vec2 left = IsoMath::GridToWorld(gridX, gridY + 1, tileWidth, tileHeight);
+
+    vertices.push_back(MakeVertex(originX + top.x, originY + top.y, viewportWidth, viewportHeight, r, g, b, a));
+    vertices.push_back(MakeVertex(originX + right.x, originY + right.y, viewportWidth, viewportHeight, r, g, b, a));
+    vertices.push_back(MakeVertex(originX + bottom.x, originY + bottom.y, viewportWidth, viewportHeight, r, g, b, a));
+
+    vertices.push_back(MakeVertex(originX + bottom.x, originY + bottom.y, viewportWidth, viewportHeight, r, g, b, a));
+    vertices.push_back(MakeVertex(originX + left.x, originY + left.y, viewportWidth, viewportHeight, r, g, b, a));
+    vertices.push_back(MakeVertex(originX + top.x, originY + top.y, viewportWidth, viewportHeight, r, g, b, a));
+}
 }
 
 IsoGridRenderer::IsoGridRenderer() = default;
@@ -360,6 +390,76 @@ void IsoGridRenderer::DrawTileHighlight(
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
     glUseProgram(0);
+}
+
+void IsoGridRenderer::DrawFilledTile(
+    int gridX,
+    int gridY,
+    float tileWidth,
+    float tileHeight,
+    float originX,
+    float originY,
+    float viewportWidth,
+    float viewportHeight,
+    float r,
+    float g,
+    float b,
+    float a
+)
+{
+    if (gridX < 0 || gridY < 0 || tileWidth <= 0.0f || tileHeight <= 0.0f || viewportWidth <= 0.0f || viewportHeight <= 0.0f)
+    {
+        return;
+    }
+
+    EnsureInitialized();
+    if (m_ShaderProgram == 0 || m_Vao == 0 || m_Vbo == 0)
+    {
+        return;
+    }
+
+    std::vector<LineVertex> vertices;
+    vertices.reserve(6);
+    AppendFilledDiamond(
+        vertices,
+        gridX,
+        gridY,
+        tileWidth,
+        tileHeight,
+        originX,
+        originY,
+        viewportWidth,
+        viewportHeight,
+        r,
+        g,
+        b,
+        a
+    );
+
+    const GLboolean wasBlendEnabled = glIsEnabled(GL_BLEND);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glBindVertexArray(m_Vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_Vbo);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        static_cast<GLsizeiptr>(vertices.size() * sizeof(LineVertex)),
+        vertices.data(),
+        GL_DYNAMIC_DRAW
+    );
+
+    glUseProgram(m_ShaderProgram);
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glUseProgram(0);
+
+    if (wasBlendEnabled == GL_FALSE)
+    {
+        glDisable(GL_BLEND);
+    }
 }
 
 void IsoGridRenderer::EnsureInitialized()

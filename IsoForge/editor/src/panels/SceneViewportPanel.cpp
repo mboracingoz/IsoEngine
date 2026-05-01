@@ -53,22 +53,6 @@ void SceneViewportPanel::OnImGuiRender()
             m_EditorCamera.Reset();
         }
 
-        char offsetBuffer[128] = {};
-        std::snprintf(
-            offsetBuffer,
-            sizeof(offsetBuffer),
-            "Camera Offset: %.1f, %.1f",
-            m_EditorCamera.GetOffsetX(),
-            m_EditorCamera.GetOffsetY()
-        );
-        ImGui::TextUnformatted(offsetBuffer);
-        ImGui::Text("Zoom: %.2f", m_EditorCamera.GetZoom());
-        ImGui::TextUnformatted("Shortcut: R = Reset Camera");
-        ImGui::Text("Tilemap Size: %d x %d", m_Tilemap.GetColumns(), m_Tilemap.GetRows());
-        ImGui::Text("Tile Count: %d", m_Tilemap.GetTileCount());
-        ImGui::Text("Filled Tiles: %d", m_Tilemap.GetFilledTileCount());
-        ImGui::Text("Empty Tile ID: %d", TilemapData::EmptyTile);
-
         const ImVec2 viewportSize = ImGui::GetContentRegionAvail();
         if (viewportSize.x > 0.0f && viewportSize.y > 0.0f)
         {
@@ -87,6 +71,29 @@ void SceneViewportPanel::OnImGuiRender()
             m_Framebuffer.Resize(width, height);
             m_Framebuffer.Bind();
             m_Framebuffer.Clear(0.08f, 0.10f, 0.14f, 1.0f);
+            for (int y = 0; y < m_Tilemap.GetRows(); ++y)
+            {
+                for (int x = 0; x < m_Tilemap.GetColumns(); ++x)
+                {
+                    if (m_Tilemap.GetTile(x, y) != TilemapData::EmptyTile)
+                    {
+                        m_IsoGridRenderer.DrawFilledTile(
+                            x,
+                            y,
+                            tileWidth,
+                            tileHeight,
+                            originX,
+                            originY,
+                            viewportWidth,
+                            viewportHeight,
+                            0.18f,
+                            0.45f,
+                            0.75f,
+                            0.45f
+                        );
+                    }
+                }
+            }
             m_IsoGridRenderer.DrawGrid(
                 m_Tilemap.GetColumns(),
                 m_Tilemap.GetRows(),
@@ -165,6 +172,20 @@ void SceneViewportPanel::OnImGuiRender()
                 );
             }
 
+            const bool middleMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
+            if (viewportHovered && currentHoverResult.isValid && !middleMouseDown)
+            {
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                {
+                    m_Tilemap.SetTile(currentHoverResult.tile.x, currentHoverResult.tile.y, 1);
+                }
+
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                {
+                    m_Tilemap.ClearTile(currentHoverResult.tile.x, currentHoverResult.tile.y);
+                }
+            }
+
             m_HoverResult = currentHoverResult;
         }
         else
@@ -173,6 +194,26 @@ void SceneViewportPanel::OnImGuiRender()
             ImGui::TextUnformatted("Scene viewport is too small to display the framebuffer.");
         }
 
+        char offsetBuffer[128] = {};
+        std::snprintf(
+            offsetBuffer,
+            sizeof(offsetBuffer),
+            "Camera Offset: %.1f, %.1f",
+            m_EditorCamera.GetOffsetX(),
+            m_EditorCamera.GetOffsetY()
+        );
+        ImGui::TextUnformatted(offsetBuffer);
+        ImGui::Text("Zoom: %.2f", m_EditorCamera.GetZoom());
+        ImGui::Text("Tilemap Size: %d x %d", m_Tilemap.GetColumns(), m_Tilemap.GetRows());
+        ImGui::Text("Tile Count: %d", m_Tilemap.GetTileCount());
+        ImGui::Text("Filled Tiles: %d", m_Tilemap.GetFilledTileCount());
+        ImGui::Text("Empty Tile ID: %d", TilemapData::EmptyTile);
+        ImGui::Text("Debug Paint Tile ID: 1");
+        ImGui::TextUnformatted("LMB: Paint debug tile");
+        ImGui::TextUnformatted("RMB: Clear tile");
+        ImGui::TextUnformatted("MMB Drag: Pan");
+        ImGui::TextUnformatted("Mouse Wheel: Zoom");
+        ImGui::TextUnformatted("R: Reset Camera");
         ImGui::Text("Viewport hovered: %s", viewportHovered ? "true" : "false");
         ImGui::Text("Viewport focused: %s", viewportFocused ? "true" : "false");
         ImGui::Text("Mouse local position: %.1f, %.1f", viewportLocalMouse.x, viewportLocalMouse.y);

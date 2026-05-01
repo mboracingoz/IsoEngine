@@ -38,6 +38,21 @@ public:
         float viewportHeight
     );
 
+    void DrawFilledTile(
+        int gridX,
+        int gridY,
+        float tileWidth,
+        float tileHeight,
+        float originX,
+        float originY,
+        float viewportWidth,
+        float viewportHeight,
+        float r,
+        float g,
+        float b,
+        float a
+    );
+
 private:
     void EnsureInitialized();
     void Release();

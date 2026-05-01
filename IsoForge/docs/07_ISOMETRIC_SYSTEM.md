@@ -241,6 +241,11 @@ Phase 3A note:
 - `TilemapData` is introduced as engine-side storage only.
 - At this stage it only stores tile IDs for a fixed-size grid; it does not imply painting, rendering filled tiles, asset loading, or serialization yet.
 
+Phase 3B note:
+- Temporary debug painting is allowed only to verify `TilemapData` mutation and visual feedback.
+- In this phase, `LMB` sets the hovered tile to ID `1` and `RMB` clears it back to `EmptyTile`.
+- This is not the final tile palette or textured tile workflow.
+
 The tilemap supports multiple layers. Each layer is rendered separately, with all tiles in one layer drawn before the next layer begins.
 
 Layer ordering:

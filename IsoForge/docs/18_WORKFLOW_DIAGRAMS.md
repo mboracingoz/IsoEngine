@@ -143,6 +143,11 @@ Phase 4A note:
 - `AssetBrowserPanel` currently lists regular files from `sandbox_project/assets/textures/` and refreshes on demand.
 - Engine-side texture loading/caching exists behind `AssetManager`, but texture previews and tile rendering are still deferred.
 
+Phase 4B note:
+- `AssetBrowserPanel` still refreshes the file list on demand, but now only loads the currently selected texture for a single preview.
+- The preview uses engine-side `AssetManager` and `Texture2D`, while `ImGui::Image()` remains editor-side only.
+- Texture tile rendering, atlas slicing, and drag/drop workflows are still deferred.
+
 ---
 
 ## 4 — Isometric Tile Painting Workflow

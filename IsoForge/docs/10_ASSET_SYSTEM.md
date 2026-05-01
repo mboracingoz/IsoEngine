@@ -130,7 +130,7 @@ function AssetBrowserPanel::Refresh():
             entries.push_back(path)
 ```
 
-For texture files, the panel displays a thumbnail using `AssetManager::LoadTexture()` and renders it as an `ImGui::Image()`. Thumbnails use the same cache as the scene, so there is no double-loading.
+For texture files, the panel can load the currently selected texture using `AssetManager::LoadTexture()` and render it as an `ImGui::Image()`. The preview uses the same cache as the rest of the editor, so there is no double-loading.
 
 The AssetBrowserPanel is read-only in MVP. Dragging assets onto the scene viewport or inspector is a later feature.
 
@@ -224,4 +224,18 @@ Still deferred in Phase 4A:
 - Texture tile rendering
 - Tileset atlas slicing
 - Asset thumbnails in the browser
+- Drag/drop asset workflows
+
+## Phase 4B Note
+
+Phase 4B adds a selected-texture preview to `AssetBrowserPanel`:
+- Clicking a listed texture loads it through engine-side `AssetManager`
+- The selected texture name, relative path, and size are shown in the panel
+- The preview is rendered editor-side with `ImGui::Image()` using `Texture2D::GetRendererID()`
+- Invalid or failed texture loads fall back to the generated missing texture
+
+Still deferred after Phase 4B:
+- Texture tile rendering in the scene viewport
+- Tileset atlas slicing
+- Full-browser thumbnails for every asset
 - Drag/drop asset workflows

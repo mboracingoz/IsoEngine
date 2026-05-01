@@ -139,6 +139,10 @@ Phase 3E note:
 - `File > Save Tilemap As...` and `File > Load Tilemap` use small ImGui modals scoped to `sandbox_project/tilemaps/`.
 - The active tilemap path is editor-visible, but this remains project-local tilemap save/load rather than full scene persistence.
 
+Phase 4A note:
+- `AssetBrowserPanel` currently lists regular files from `sandbox_project/assets/textures/` and refreshes on demand.
+- Engine-side texture loading/caching exists behind `AssetManager`, but texture previews and tile rendering are still deferred.
+
 ---
 
 ## 4 — Isometric Tile Painting Workflow

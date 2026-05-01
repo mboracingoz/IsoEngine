@@ -3,6 +3,8 @@ add_library(isoforge_engine STATIC
     src/platform/OpenGLContext.cpp
     src/core/Application.cpp
     src/renderer/Framebuffer.cpp
+    src/renderer/Texture2D.cpp
+    src/assets/AssetManager.cpp
     src/iso/IsoGridRenderer.cpp
     src/iso/TilemapData.cpp
     src/serialization/TilemapSerializer.cpp
@@ -17,6 +19,7 @@ target_link_libraries(isoforge_engine
     PUBLIC
         SDL3::SDL3
         glad
+        stb
         nlohmann_json::nlohmann_json
 )
 

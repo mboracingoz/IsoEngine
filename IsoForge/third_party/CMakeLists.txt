@@ -58,6 +58,13 @@ set(JSON_Install OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(nlohmann_json)
 
+add_library(stb INTERFACE)
+
+target_include_directories(stb
+    INTERFACE
+        ${CMAKE_CURRENT_SOURCE_DIR}/stb
+)
+
 add_library(imgui STATIC
     imgui/imgui.cpp
     imgui/imgui_draw.cpp

@@ -209,3 +209,19 @@ A future asset database would:
 - Enable asset references by UUID instead of path (more robust when files are moved).
 
 This is explicitly **not part of MVP**. The path-based system is sufficient for the MVP scope and can be replaced later.
+
+---
+
+## Phase 4A Note
+
+Phase 4A introduces the basic texture asset foundation only:
+- `Texture2D` as an engine-side OpenGL texture RAII wrapper
+- `AssetManager` as an engine-side texture loader/cache keyed by relative asset path
+- A generated 4x4 magenta/black missing-texture fallback
+- `AssetBrowserPanel` listing files under `sandbox_project/assets/textures/`
+
+Still deferred in Phase 4A:
+- Texture tile rendering
+- Tileset atlas slicing
+- Asset thumbnails in the browser
+- Drag/drop asset workflows

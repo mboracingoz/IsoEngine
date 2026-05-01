@@ -1,6 +1,7 @@
 add_executable(isoforge_editor
     src/main.cpp
     src/EditorApp.cpp
+    src/EditorCamera.cpp
     src/ImGuiLayer.cpp
     src/panels/SceneViewportPanel.cpp
     src/panels/HierarchyPanel.cpp

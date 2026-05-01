@@ -189,7 +189,7 @@ function SceneViewportPanel::OnImGuiRender(framebuffer):
     // Note: UV flip (0,1)→(1,0) corrects OpenGL's bottom-left origin
     
     // Check if mouse is inside the viewport for input routing
-    viewportHovered = ImGui::IsWindowHovered()
+    viewportHovered = ImGui::IsItemHovered()   // after ImGui::Image()
     viewportFocused = ImGui::IsWindowFocused()
     
     ImGui::End()
@@ -246,6 +246,10 @@ Dear ImGui consumes some input events. The scene viewport must only receive inpu
 **Rule**:
 - If ImGui wants the mouse (user is interacting with a panel widget), do not pass mouse input to the scene camera.
 - If the mouse is over the scene viewport and ImGui does not want it, pass input to the editor camera and tile picker.
+
+**Phase 2C note**:
+- The Scene Viewport camera may be reset with `R` while the viewport image is hovered or the Scene Viewport window is focused.
+- This reset shortcut must not trigger while ImGui text input is active.
 
 ```
 function EditorApp::UpdateInput():

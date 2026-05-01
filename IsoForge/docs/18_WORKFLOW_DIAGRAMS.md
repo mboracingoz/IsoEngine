@@ -111,6 +111,7 @@ flowchart TD
     G -- Yes --> I{Which input type?}
     I -- Middle mouse drag\nor Alt+LMB --> J[CameraController: Pan]
     I -- Scroll wheel --> K[CameraController: Zoom]
+    I -- R key\nand not typing --> S[CameraController: Reset]
     I -- Mouse move --> L[IsoPicker: ScreenToGrid\ncompute hovered tile]
     L --> M[TilemapData: show\nhover highlight]
     I -- Left click --> N[TilePainter: paint\nselected tile at grid coord]
@@ -119,8 +120,11 @@ flowchart TD
     P --> O
     I -- Left click\non entity --> Q[SelectionContext:\nset selected entity]
     Q --> R[InspectorPanel refreshes]
-    J & K & M & O & R --> Z
+    J & K & S & M & O & R --> Z
 ```
+
+Phase 2C note:
+- `R` resets the Scene Viewport camera only while the viewport is hovered or focused, and it is ignored while typing into an ImGui text field.
 
 ---
 

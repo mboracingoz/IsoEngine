@@ -265,3 +265,13 @@ Still deferred after Phase 4D:
 - Serialization of texture bindings
 - Tileset atlas slicing and atlas-driven palette workflows
 - Drag/drop asset workflows
+
+## Phase 4E Note
+
+Phase 4E renders texture-bound debug tile IDs in the scene viewport:
+- `SceneViewportPanel` resolves painted numeric tile IDs `1` through `4` against editor-side `EditorState` bindings
+- Bound textures are loaded through engine-side `AssetManager` and drawn by engine-side `IsoGridRenderer`
+- Unbound tile IDs still render as colored debug diamonds
+- This is full-texture debug rendering only, not atlas slicing or tileset import
+- Texture bindings remain editor-state only and are not serialized yet
+- Tilemap JSON still stores numeric tile IDs only

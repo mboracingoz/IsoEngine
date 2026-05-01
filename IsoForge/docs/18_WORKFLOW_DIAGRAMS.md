@@ -572,3 +572,8 @@ Diagram 7 (Dependency Direction) is the law. If Codex finds itself `#include`-in
 ### 4 — Update diagrams when architecture changes
 
 If a refactor changes the execution order, adds a new context object, or moves a module between layers, the corresponding diagram(s) in this file must be updated in the same commit. Stale diagrams will cause Codex (and human developers) to make incorrect assumptions. Treat diagrams as **living documentation**, not optional commentary.
+
+Phase 4E note:
+- During framebuffer rendering, `SceneViewportPanel` now resolves painted debug tile IDs `1` through `4` through `EditorState`.
+- When a binding exists, the panel loads the texture through `AssetManager` and calls engine-side `IsoGridRenderer` to draw a textured debug tile.
+- Tile IDs without bindings still render as colored debug diamonds, and tilemap JSON remains numeric-ID only.

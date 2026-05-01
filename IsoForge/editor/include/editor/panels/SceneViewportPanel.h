@@ -3,6 +3,7 @@
 #include "editor/EditorCamera.h"
 #include "editor/EditorState.h"
 #include "editor/panels/Panel.h"
+#include "engine/assets/AssetManager.h"
 #include "engine/iso/IsoMath.h"
 #include "engine/iso/IsoGridRenderer.h"
 #include "engine/iso/TilemapData.h"
@@ -35,6 +36,7 @@ private:
     TilemapData m_Tilemap {20, 20};
     HoverResult m_HoverResult;
     IsoGridRenderer m_IsoGridRenderer;
+    AssetManager m_AssetManager {"sandbox_project"};
     std::filesystem::path m_CurrentTilemapPath;
     std::string m_LastTilemapIOStatus = "Tilemap IO: No save/load operation yet";
 };

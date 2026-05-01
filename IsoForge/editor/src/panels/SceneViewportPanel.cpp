@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <memory>
+#include <string_view>
 #include <type_traits>
 
 namespace IsoForge
@@ -49,6 +51,25 @@ DebugTileColor GetDebugTileColor(int tileId)
     default:
         return {0.50f, 0.50f, 0.50f, 0.45f};
     }
+}
+
+bool IsBoundDebugTileID(int tileId)
+{
+    return tileId >= 1 && tileId <= 4;
+}
+
+int CountTextureBindings(const EditorState& editorState)
+{
+    int count = 0;
+    for (int tileId = 1; tileId <= 4; ++tileId)
+    {
+        if (editorState.HasTextureBinding(tileId))
+        {
+            ++count;
+        }
+    }
+
+    return count;
 }
 }
 
@@ -203,21 +224,47 @@ void SceneViewportPanel::OnImGuiRender()
                     const int tileId = m_Tilemap.GetTile(x, y);
                     if (tileId != TilemapData::EmptyTile)
                     {
-                        const DebugTileColor color = GetDebugTileColor(tileId);
-                        m_IsoGridRenderer.DrawFilledTile(
-                            x,
-                            y,
-                            tileWidth,
-                            tileHeight,
-                            originX,
-                            originY,
-                            viewportWidth,
-                            viewportHeight,
-                            color.r,
-                            color.g,
-                            color.b,
-                            color.a
-                        );
+                        bool drewTexturedTile = false;
+                        if (IsBoundDebugTileID(tileId) && m_EditorState.HasTextureBinding(tileId))
+                        {
+                            const std::string& relativePath =
+                                m_EditorState.debugTileTexturePaths[static_cast<size_t>(tileId)];
+                            const std::shared_ptr<Texture2D> texture = m_AssetManager.LoadTexture(relativePath);
+                            if (texture && texture->IsValid())
+                            {
+                                m_IsoGridRenderer.DrawTexturedTile(
+                                    x,
+                                    y,
+                                    tileWidth,
+                                    tileHeight,
+                                    originX,
+                                    originY,
+                                    viewportWidth,
+                                    viewportHeight,
+                                    texture->GetRendererID()
+                                );
+                                drewTexturedTile = true;
+                            }
+                        }
+
+                        if (!drewTexturedTile)
+                        {
+                            const DebugTileColor color = GetDebugTileColor(tileId);
+                            m_IsoGridRenderer.DrawFilledTile(
+                                x,
+                                y,
+                                tileWidth,
+                                tileHeight,
+                                originX,
+                                originY,
+                                viewportWidth,
+                                viewportHeight,
+                                color.r,
+                                color.g,
+                                color.b,
+                                color.a
+                            );
+                        }
                     }
                 }
             }
@@ -353,6 +400,9 @@ void SceneViewportPanel::OnImGuiRender()
             ImGui::Text("Filled Tiles: %d", m_Tilemap.GetFilledTileCount());
             ImGui::Text("Empty Tile ID: %d", TilemapData::EmptyTile);
             ImGui::Text("Selected Debug Tile ID: %d", m_EditorState.selectedDebugTileId);
+            ImGui::TextUnformatted("Texture Tile Rendering: enabled");
+            ImGui::Text("Bound Texture Tiles: %d", CountTextureBindings(m_EditorState));
+            ImGui::TextUnformatted("Tilemap JSON: numeric IDs only");
             ImGui::Text(
                 "Current Tilemap Path: %s",
                 m_CurrentTilemapPath.empty() ? "(none)" : m_CurrentTilemapPath.generic_string().c_str()

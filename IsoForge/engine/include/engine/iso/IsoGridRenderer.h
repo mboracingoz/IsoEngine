@@ -53,13 +53,29 @@ public:
         float a
     );
 
+    void DrawTexturedTile(
+        int gridX,
+        int gridY,
+        float tileWidth,
+        float tileHeight,
+        float originX,
+        float originY,
+        float viewportWidth,
+        float viewportHeight,
+        uint32_t textureID
+    );
+
 private:
     void EnsureInitialized();
+    void EnsureTextureInitialized();
     void Release();
 
 private:
-    uint32_t m_ShaderProgram = 0;
-    uint32_t m_Vao = 0;
-    uint32_t m_Vbo = 0;
+    uint32_t m_ColorShaderProgram = 0;
+    uint32_t m_ColorVao = 0;
+    uint32_t m_ColorVbo = 0;
+    uint32_t m_TextureShaderProgram = 0;
+    uint32_t m_TextureVao = 0;
+    uint32_t m_TextureVbo = 0;
 };
 }

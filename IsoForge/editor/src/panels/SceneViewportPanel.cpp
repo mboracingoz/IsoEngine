@@ -45,6 +45,8 @@ void SceneViewportPanel::OnImGuiRender()
         const bool viewportFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
         ImVec2 imageMin = ImVec2(0.0f, 0.0f);
         ImVec2 imageMax = ImVec2(0.0f, 0.0f);
+        Vec2 viewportLocalMouse {};
+        HoverResult currentHoverResult {};
 
         if (ImGui::Button("Reset Camera"))
         {
@@ -91,6 +93,19 @@ void SceneViewportPanel::OnImGuiRender()
                 viewportWidth,
                 viewportHeight
             );
+            if (m_HoverResult.isValid)
+            {
+                m_IsoGridRenderer.DrawTileHighlight(
+                    m_HoverResult.tile.x,
+                    m_HoverResult.tile.y,
+                    tileWidth,
+                    tileHeight,
+                    originX,
+                    originY,
+                    viewportWidth,
+                    viewportHeight
+                );
+            }
             m_Framebuffer.Unbind();
 
             ImGui::Image(
@@ -103,6 +118,11 @@ void SceneViewportPanel::OnImGuiRender()
             viewportHovered = ImGui::IsItemHovered();
             imageMin = ImGui::GetItemRectMin();
             imageMax = ImGui::GetItemRectMax();
+            const ImVec2 mousePos = ImGui::GetMousePos();
+            viewportLocalMouse = {
+                mousePos.x - imageMin.x,
+                mousePos.y - imageMin.y
+            };
             ImGuiIO& io = ImGui::GetIO();
 
             if ((viewportHovered || viewportFocused) && !io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_R, false))
@@ -126,14 +146,34 @@ void SceneViewportPanel::OnImGuiRender()
                     }
                 }
             }
+
+            if (viewportHovered)
+            {
+                currentHoverResult = IsoMath::GetHoveredTile(
+                    viewportLocalMouse,
+                    originX,
+                    originY,
+                    1.0f,
+                    tileWidth,
+                    tileHeight,
+                    20,
+                    20
+                );
+            }
+
+            m_HoverResult = currentHoverResult;
         }
         else
         {
+            m_HoverResult = {};
             ImGui::TextUnformatted("Scene viewport is too small to display the framebuffer.");
         }
 
         ImGui::Text("Viewport hovered: %s", viewportHovered ? "true" : "false");
         ImGui::Text("Viewport focused: %s", viewportFocused ? "true" : "false");
+        ImGui::Text("Mouse local position: %.1f, %.1f", viewportLocalMouse.x, viewportLocalMouse.y);
+        ImGui::Text("Hover valid: %s", currentHoverResult.isValid ? "true" : "false");
+        ImGui::Text("Hovered tile: %d, %d", currentHoverResult.tile.x, currentHoverResult.tile.y);
         ImGui::Text(
             "Image Rect: Min(%.1f, %.1f) Max(%.1f, %.1f)",
             imageMin.x,

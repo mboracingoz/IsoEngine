@@ -2,6 +2,7 @@
 
 #include "editor/EditorCamera.h"
 #include "editor/panels/Panel.h"
+#include "engine/iso/IsoMath.h"
 #include "engine/iso/IsoGridRenderer.h"
 #include "engine/renderer/Framebuffer.h"
 
@@ -16,6 +17,7 @@ public:
 private:
     EditorCamera m_EditorCamera;
     Framebuffer m_Framebuffer;
+    HoverResult m_HoverResult;
     IsoGridRenderer m_IsoGridRenderer;
 };
 }

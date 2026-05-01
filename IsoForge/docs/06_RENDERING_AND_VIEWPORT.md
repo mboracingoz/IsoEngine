@@ -251,6 +251,10 @@ Dear ImGui consumes some input events. The scene viewport must only receive inpu
 - The Scene Viewport camera may be reset with `R` while the viewport image is hovered or the Scene Viewport window is focused.
 - This reset shortcut must not trigger while ImGui text input is active.
 
+**Phase 2D note**:
+- The editor collects the ImGui mouse position over the framebuffer image, converts it to viewport-local coordinates, and passes that data to engine-side isometric math helpers.
+- The hovered tile highlight may use the previous frame's hover result so the framebuffer can still be rendered before `ImGui::Image()` in the same frame.
+
 ```
 function EditorApp::UpdateInput():
     io = ImGui::GetIO()

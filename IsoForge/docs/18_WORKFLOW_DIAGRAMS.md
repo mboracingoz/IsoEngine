@@ -126,6 +126,10 @@ flowchart TD
 Phase 2C note:
 - `R` resets the Scene Viewport camera only while the viewport is hovered or focused, and it is ignored while typing into an ImGui text field.
 
+Phase 2D note:
+- Hovered tile detection converts the mouse position from framebuffer-image space into viewport-local coordinates, then into engine-side isometric grid coordinates.
+- The hovered tile highlight may be rendered from the previous frame's stored hover result so the framebuffer pass can still run before `ImGui::Image()`.
+
 ---
 
 ## 4 — Isometric Tile Painting Workflow

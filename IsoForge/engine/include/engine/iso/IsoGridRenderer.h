@@ -27,6 +27,17 @@ public:
         float viewportHeight
     );
 
+    void DrawTileHighlight(
+        int gridX,
+        int gridY,
+        float tileWidth,
+        float tileHeight,
+        float originX,
+        float originY,
+        float viewportWidth,
+        float viewportHeight
+    );
+
 private:
     void EnsureInitialized();
     void Release();

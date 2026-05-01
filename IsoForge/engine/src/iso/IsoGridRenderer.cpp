@@ -28,6 +28,11 @@ constexpr float GridColorG = 0.45f;
 constexpr float GridColorB = 0.55f;
 constexpr float GridColorA = 1.0f;
 
+constexpr float HighlightColorR = 0.9f;
+constexpr float HighlightColorG = 0.85f;
+constexpr float HighlightColorB = 0.25f;
+constexpr float HighlightColorA = 1.0f;
+
 constexpr const char* VertexShaderSource = R"(
 #version 330 core
 layout (location = 0) in vec2 a_Position;
@@ -134,12 +139,21 @@ GLuint CreateShaderProgram()
     return program;
 }
 
-LineVertex MakeVertex(float screenX, float screenY, float viewportWidth, float viewportHeight)
+LineVertex MakeVertex(
+    float screenX,
+    float screenY,
+    float viewportWidth,
+    float viewportHeight,
+    float r,
+    float g,
+    float b,
+    float a
+)
 {
     const float ndcX = (screenX / viewportWidth) * 2.0f - 1.0f;
     const float ndcY = 1.0f - (screenY / viewportHeight) * 2.0f;
 
-    return {ndcX, ndcY, GridColorR, GridColorG, GridColorB, GridColorA};
+    return {ndcX, ndcY, r, g, b, a};
 }
 
 void AppendLine(
@@ -149,11 +163,42 @@ void AppendLine(
     float originX,
     float originY,
     float viewportWidth,
-    float viewportHeight
+    float viewportHeight,
+    float r,
+    float g,
+    float b,
+    float a
 )
 {
-    vertices.push_back(MakeVertex(originX + start.x, originY + start.y, viewportWidth, viewportHeight));
-    vertices.push_back(MakeVertex(originX + end.x, originY + end.y, viewportWidth, viewportHeight));
+    vertices.push_back(MakeVertex(originX + start.x, originY + start.y, viewportWidth, viewportHeight, r, g, b, a));
+    vertices.push_back(MakeVertex(originX + end.x, originY + end.y, viewportWidth, viewportHeight, r, g, b, a));
+}
+
+void AppendDiamondOutline(
+    std::vector<LineVertex>& vertices,
+    int gridX,
+    int gridY,
+    float tileWidth,
+    float tileHeight,
+    float originX,
+    float originY,
+    float viewportWidth,
+    float viewportHeight,
+    float r,
+    float g,
+    float b,
+    float a
+)
+{
+    const Vec2 top = IsoMath::GridToWorld(gridX, gridY, tileWidth, tileHeight);
+    const Vec2 right = IsoMath::GridToWorld(gridX + 1, gridY, tileWidth, tileHeight);
+    const Vec2 bottom = IsoMath::GridToWorld(gridX + 1, gridY + 1, tileWidth, tileHeight);
+    const Vec2 left = IsoMath::GridToWorld(gridX, gridY + 1, tileWidth, tileHeight);
+
+    AppendLine(vertices, top, right, originX, originY, viewportWidth, viewportHeight, r, g, b, a);
+    AppendLine(vertices, right, bottom, originX, originY, viewportWidth, viewportHeight, r, g, b, a);
+    AppendLine(vertices, bottom, left, originX, originY, viewportWidth, viewportHeight, r, g, b, a);
+    AppendLine(vertices, left, top, originX, originY, viewportWidth, viewportHeight, r, g, b, a);
 }
 }
 
@@ -223,15 +268,21 @@ void IsoGridRenderer::DrawGrid(
     {
         for (int x = 0; x < columns; ++x)
         {
-            const Vec2 top = IsoMath::GridToWorld(x, y, tileWidth, tileHeight);
-            const Vec2 right = IsoMath::GridToWorld(x + 1, y, tileWidth, tileHeight);
-            const Vec2 bottom = IsoMath::GridToWorld(x + 1, y + 1, tileWidth, tileHeight);
-            const Vec2 left = IsoMath::GridToWorld(x, y + 1, tileWidth, tileHeight);
-
-            AppendLine(vertices, top, right, originX, originY, viewportWidth, viewportHeight);
-            AppendLine(vertices, right, bottom, originX, originY, viewportWidth, viewportHeight);
-            AppendLine(vertices, bottom, left, originX, originY, viewportWidth, viewportHeight);
-            AppendLine(vertices, left, top, originX, originY, viewportWidth, viewportHeight);
+            AppendDiamondOutline(
+                vertices,
+                x,
+                y,
+                tileWidth,
+                tileHeight,
+                originX,
+                originY,
+                viewportWidth,
+                viewportHeight,
+                GridColorR,
+                GridColorG,
+                GridColorB,
+                GridColorA
+            );
         }
     }
 
@@ -246,6 +297,64 @@ void IsoGridRenderer::DrawGrid(
 
     glUseProgram(m_ShaderProgram);
     glLineWidth(1.0f);
+    glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertices.size()));
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glUseProgram(0);
+}
+
+void IsoGridRenderer::DrawTileHighlight(
+    int gridX,
+    int gridY,
+    float tileWidth,
+    float tileHeight,
+    float originX,
+    float originY,
+    float viewportWidth,
+    float viewportHeight
+)
+{
+    if (gridX < 0 || gridY < 0 || tileWidth <= 0.0f || tileHeight <= 0.0f || viewportWidth <= 0.0f || viewportHeight <= 0.0f)
+    {
+        return;
+    }
+
+    EnsureInitialized();
+    if (m_ShaderProgram == 0 || m_Vao == 0 || m_Vbo == 0)
+    {
+        return;
+    }
+
+    std::vector<LineVertex> vertices;
+    vertices.reserve(8);
+    AppendDiamondOutline(
+        vertices,
+        gridX,
+        gridY,
+        tileWidth,
+        tileHeight,
+        originX,
+        originY,
+        viewportWidth,
+        viewportHeight,
+        HighlightColorR,
+        HighlightColorG,
+        HighlightColorB,
+        HighlightColorA
+    );
+
+    glBindVertexArray(m_Vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_Vbo);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        static_cast<GLsizeiptr>(vertices.size() * sizeof(LineVertex)),
+        vertices.data(),
+        GL_DYNAMIC_DRAW
+    );
+
+    glUseProgram(m_ShaderProgram);
+    glLineWidth(2.0f);
     glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertices.size()));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);

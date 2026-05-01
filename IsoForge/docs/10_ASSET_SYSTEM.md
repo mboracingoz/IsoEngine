@@ -252,3 +252,16 @@ Still deferred after Phase 4C:
 - Mapping texture assets to tile IDs
 - Tileset atlas slicing and atlas-driven palette workflows
 - Drag/drop asset workflows
+
+## Phase 4D Note
+
+Phase 4D lets `TilePalettePanel` bind the currently selected texture asset to debug tile IDs `1` through `4`:
+- The binding table lives only in editor-side `EditorState`
+- `TilePalettePanel` can bind or clear texture paths for debug tile IDs without changing paint behavior
+- Tilemap JSON save/load still stores numeric tile IDs only
+
+Still deferred after Phase 4D:
+- Texture tile rendering
+- Serialization of texture bindings
+- Tileset atlas slicing and atlas-driven palette workflows
+- Drag/drop asset workflows

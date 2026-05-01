@@ -153,6 +153,10 @@ Phase 4C note:
 - `TilePalettePanel` reads that selection state and displays it without taking a direct dependency on `AssetBrowserPanel`.
 - Debug painting still uses numeric tile IDs only; texture-driven tile rendering is still deferred.
 
+Phase 4D note:
+- `TilePalettePanel` can now bind the selected texture path from `EditorState` to debug tile IDs `1` through `4`.
+- These bindings remain editor-state only and do not change viewport rendering or tilemap JSON serialization yet.
+
 ---
 
 ## 4 — Isometric Tile Painting Workflow

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "editor/panels/Panel.h"
+#include "engine/iso/IsoGridRenderer.h"
 #include "engine/renderer/Framebuffer.h"
 
 namespace IsoForge
@@ -13,5 +14,6 @@ public:
 
 private:
     Framebuffer m_Framebuffer;
+    IsoGridRenderer m_IsoGridRenderer;
 };
 }

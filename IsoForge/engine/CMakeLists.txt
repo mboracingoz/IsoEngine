@@ -3,6 +3,7 @@ add_library(isoforge_engine STATIC
     src/platform/OpenGLContext.cpp
     src/core/Application.cpp
     src/renderer/Framebuffer.cpp
+    src/iso/IsoGridRenderer.cpp
 )
 
 target_include_directories(isoforge_engine

@@ -45,10 +45,24 @@ void SceneViewportPanel::OnImGuiRender()
         {
             const uint32_t width = static_cast<uint32_t>(viewportSize.x);
             const uint32_t height = static_cast<uint32_t>(viewportSize.y);
+            const float viewportWidth = static_cast<float>(width);
+            const float viewportHeight = static_cast<float>(height);
+            const float originX = viewportWidth * 0.5f;
+            const float originY = 40.0f;
 
             m_Framebuffer.Resize(width, height);
             m_Framebuffer.Bind();
             m_Framebuffer.Clear(0.08f, 0.10f, 0.14f, 1.0f);
+            m_IsoGridRenderer.DrawGrid(
+                20,
+                20,
+                64.0f,
+                32.0f,
+                originX,
+                originY,
+                viewportWidth,
+                viewportHeight
+            );
             m_Framebuffer.Unbind();
 
             ImGui::Image(

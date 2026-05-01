@@ -2,10 +2,30 @@
 
 #include <imgui.h>
 
+#include <cstdint>
+#include <type_traits>
+
 namespace IsoForge
 {
+namespace
+{
+template <typename TextureID = ImTextureID>
+TextureID ToImTextureID(uint32_t textureID)
+{
+    if constexpr (std::is_pointer_v<TextureID>)
+    {
+        return reinterpret_cast<TextureID>(static_cast<intptr_t>(textureID));
+    }
+    else
+    {
+        return static_cast<TextureID>(textureID);
+    }
+}
+}
+
 SceneViewportPanel::SceneViewportPanel()
     : Panel("Scene Viewport")
+    , m_Framebuffer(FramebufferSpec{1280, 720})
 {
 }
 
@@ -16,14 +36,35 @@ void SceneViewportPanel::OnImGuiRender()
         return;
     }
 
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
     if (ImGui::Begin(m_Title, &m_IsOpen))
     {
-        ImGui::TextUnformatted("Scene viewport will display the framebuffer in a later phase.");
-        ImGui::Separator();
-        ImGui::TextUnformatted("Framebuffer: not implemented yet");
-        ImGui::TextUnformatted("Renderer: not implemented yet");
+        const ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+        if (viewportSize.x > 0.0f && viewportSize.y > 0.0f)
+        {
+            const uint32_t width = static_cast<uint32_t>(viewportSize.x);
+            const uint32_t height = static_cast<uint32_t>(viewportSize.y);
+
+            m_Framebuffer.Resize(width, height);
+            m_Framebuffer.Bind();
+            m_Framebuffer.Clear(0.08f, 0.10f, 0.14f, 1.0f);
+            m_Framebuffer.Unbind();
+
+            ImGui::Image(
+                ToImTextureID(m_Framebuffer.GetColorAttachmentID()),
+                viewportSize,
+                ImVec2(0.0f, 1.0f),
+                ImVec2(1.0f, 0.0f)
+            );
+        }
+        else
+        {
+            ImGui::TextUnformatted("Scene viewport is too small to display the framebuffer.");
+        }
     }
 
     ImGui::End();
+    ImGui::PopStyleVar();
 }
 }

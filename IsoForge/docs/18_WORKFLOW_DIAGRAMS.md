@@ -148,6 +148,11 @@ Phase 4B note:
 - The preview uses engine-side `AssetManager` and `Texture2D`, while `ImGui::Image()` remains editor-side only.
 - Texture tile rendering, atlas slicing, and drag/drop workflows are still deferred.
 
+Phase 4C note:
+- `AssetBrowserPanel` writes the selected texture asset name and relative path into shared editor-side `EditorState`.
+- `TilePalettePanel` reads that selection state and displays it without taking a direct dependency on `AssetBrowserPanel`.
+- Debug painting still uses numeric tile IDs only; texture-driven tile rendering is still deferred.
+
 ---
 
 ## 4 — Isometric Tile Painting Workflow

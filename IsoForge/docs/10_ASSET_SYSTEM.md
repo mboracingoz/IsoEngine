@@ -239,3 +239,16 @@ Still deferred after Phase 4B:
 - Tileset atlas slicing
 - Full-browser thumbnails for every asset
 - Drag/drop asset workflows
+
+## Phase 4C Note
+
+Phase 4C exposes the selected texture asset to `TilePalettePanel` through editor-side `EditorState`:
+- `AssetBrowserPanel` writes the selected texture display name and relative asset path into shared editor state
+- `TilePalettePanel` reads that shared state and displays the current texture selection
+- This is selection-only editor plumbing; it does not change how tile painting works
+
+Still deferred after Phase 4C:
+- Texture tile rendering
+- Mapping texture assets to tile IDs
+- Tileset atlas slicing and atlas-driven palette workflows
+- Drag/drop asset workflows

@@ -37,8 +37,9 @@ TextureID ToImTextureID(uint32_t rendererID)
 }
 }
 
-AssetBrowserPanel::AssetBrowserPanel()
+AssetBrowserPanel::AssetBrowserPanel(EditorState& editorState)
     : Panel("Asset Browser")
+    , m_EditorState(editorState)
     , m_AssetManager("sandbox_project")
     , m_TextureRootPath("sandbox_project/assets/textures")
 {
@@ -71,12 +72,19 @@ void AssetBrowserPanel::RefreshTextureFileList()
         );
         if (selectedIt == m_TextureFiles.end())
         {
-            m_SelectedRelativeTexturePath.clear();
-            m_SelectedTextureDisplayName.clear();
-            m_SelectedPreviewTexture.reset();
-            m_UsingMissingTextureFallback = false;
+            ClearSelectedTexture();
         }
     }
+}
+
+void AssetBrowserPanel::ClearSelectedTexture()
+{
+    m_SelectedRelativeTexturePath.clear();
+    m_SelectedTextureDisplayName.clear();
+    m_SelectedPreviewTexture.reset();
+    m_UsingMissingTextureFallback = false;
+    m_EditorState.selectedTextureRelativePath.clear();
+    m_EditorState.selectedTextureDisplayName.clear();
 }
 
 void AssetBrowserPanel::SelectTextureFile(const std::filesystem::path& fileName)
@@ -85,6 +93,8 @@ void AssetBrowserPanel::SelectTextureFile(const std::filesystem::path& fileName)
     m_SelectedRelativeTexturePath = std::filesystem::path("assets") / "textures" / fileName.filename();
     m_SelectedPreviewTexture = m_AssetManager.LoadTexture(m_SelectedRelativeTexturePath);
     m_UsingMissingTextureFallback = (m_SelectedPreviewTexture == m_AssetManager.GetMissingTexture());
+    m_EditorState.selectedTextureDisplayName = m_SelectedTextureDisplayName;
+    m_EditorState.selectedTextureRelativePath = m_SelectedRelativeTexturePath.generic_string();
 }
 
 void AssetBrowserPanel::OnImGuiRender()
